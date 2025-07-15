@@ -7,7 +7,7 @@ import Loader from '../components/loader.component';
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  AreaChart, Area, ComposedChart
+  AreaChart, Area, ComposedChart, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
@@ -168,12 +168,30 @@ const AdminUtilities = () => {
 
   // Prepare chart data for database maintenance
   const prepareDbMaintenanceChartData = () => {
-    return dbMaintenanceHistory.slice(0, 10).map(log => ({
-      date: new Date(log.date).toLocaleDateString(),
-      cleanedRecords: log.orphanedComments || 0,
-      sizeReduction: log.sizeReduction || 0,
-      optimizedIndexes: log.optimizedIndexes || 0
-    }));
+    console.log('dbMaintenanceHistory:', dbMaintenanceHistory);
+    return dbMaintenanceHistory.slice(0, 10).map(log => {
+      let dateStr = '';
+      if (log.date && !isNaN(new Date(log.date))) {
+        dateStr = new Date(log.date).toLocaleDateString();
+      } else if (log.timestamp && !isNaN(new Date(log.timestamp))) {
+        dateStr = new Date(log.timestamp).toLocaleDateString();
+      }
+      // Support both flattened and nested cleanedRecords
+      let cleanedRecords = 0;
+      if (typeof log.cleanedRecords === 'object' && log.cleanedRecords !== null) {
+        cleanedRecords = log.cleanedRecords.orphanedComments || 0;
+      } else if (typeof log.cleanedRecords === 'number') {
+        cleanedRecords = log.cleanedRecords;
+      } else if (typeof log.orphanedComments === 'number') {
+        cleanedRecords = log.orphanedComments;
+      }
+      return {
+        date: dateStr,
+        cleanedRecords,
+        sizeReduction: typeof log.sizeReduction === 'number' ? log.sizeReduction : 0,
+        optimizedIndexes: log.optimizedIndexes || 0
+      };
+    });
   };
   // Prepare chart data for each metric
   const prepareMetricChartData = (history, valueKey = 'value') => {
@@ -196,8 +214,21 @@ const AdminUtilities = () => {
     }));
   };
 
+  // Prepare data for RadarChart in System Health
+  const prepareSystemHealthRadarData = () => {
+    const metrics = ['memory', 'cpu', 'disk', 'network', 'response_time', 'error_rate'];
+    const data = metrics.map(metric => {
+      const log = systemHealthHistory.find(h => h.metric === metric);
+      return {
+        metric: metric.charAt(0).toUpperCase() + metric.slice(1),
+        value: log ? log.value : 0
+      };
+    });
+    return data;
+  };
+
   return (
-    <div className="max-w-4xl mx-auto p-8">
+    <div className="w-full max-w-full md:max-w-4xl mx-auto p-2 xs:p-3 sm:p-4 md:p-8">
       <h1 className="text-2xl font-medium mb-6">Admin Utilities</h1>
       
       <InPageNavigation routes={["Image Cleanup", "Database Maintenance", "System Health"]} defaultActiveIndex={0}>
@@ -258,47 +289,9 @@ const AdminUtilities = () => {
             {/* Analytics Charts */}
             {dbMaintenanceHistory.length > 0 && (
               <div className="space-y-6 mt-8">
-                
-                {/* Cleaned Records: AreaChart */}
+                {/* Multi-Line Chart for Database Maintenance */}
                 <div className="p-4 bg-white border border-gray-200 rounded">
-                  <h4 className="font-medium mb-4">Cleaned Records Over Time</h4>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <AreaChart data={prepareDbMaintenanceChartData()}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Area type="monotone" dataKey="cleanedRecords" stroke="#42a5f5" fill="#90caf9" name="Cleaned Records" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-                {/* Optimized Indexes: PieChart */}
-                <div className="p-4 bg-white border border-gray-200 rounded">
-                  <h4 className="font-medium mb-4">Optimized Indexes Distribution</h4>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={prepareDbMaintenanceChartData()}
-                        dataKey="optimizedIndexes"
-                        nameKey="date"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={80}
-                        fill="#66bb6a"
-                        label={({ name, value }) => `${name}: ${value}`}
-                      >
-                        {prepareDbMaintenanceChartData().map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                {/* Size Reduction: LineChart */}
-                <div className="p-4 bg-white border border-gray-200 rounded">
-                  <h4 className="font-medium mb-4">Database Size Reduction</h4>
+                  <h4 className="font-medium mb-4">Maintenance Factors Over Time</h4>
                   <ResponsiveContainer width="100%" height={300}>
                     <LineChart data={prepareDbMaintenanceChartData()}>
                       <CartesianGrid strokeDasharray="3 3" />
@@ -306,7 +299,9 @@ const AdminUtilities = () => {
                       <YAxis />
                       <Tooltip />
                       <Legend />
-                      <Line type="monotone" dataKey="sizeReduction" stroke="#82ca9d" name="Size Reduction (MB)" />
+                      <Line type="monotone" dataKey="cleanedRecords" stroke="#1976d2" name="Cleaned Records" strokeWidth={3} dot={{ r: 4, fill: '#1976d2', stroke: '#fff', strokeWidth: 2 }} />
+                      <Line type="monotone" dataKey="optimizedIndexes" stroke="#43e97b" name="Optimized Indexes" strokeWidth={3} dot={{ r: 4, fill: '#43e97b', stroke: '#fff', strokeWidth: 2 }} />
+                      <Line type="monotone" dataKey="sizeReduction" stroke="#ff6a00" name="Size Reduction (MB)" strokeWidth={3} dot={{ r: 4, fill: '#ff6a00', stroke: '#fff', strokeWidth: 2 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -415,99 +410,30 @@ const AdminUtilities = () => {
             )}
             {/* Analytics Charts */}
             <div className="space-y-6 mt-8">
-             
-              {/* Memory Usage: AreaChart */}
+              {/* RadarChart for System Health */}
               <div className="p-4 bg-white border border-gray-200 rounded">
-                <h4 className="font-medium mb-4">Memory Usage Over Time</h4>
-                <ResponsiveContainer width="100%" height={300}>
-                  <AreaChart data={prepareMetricChartData(systemHealthHistory)}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Area type="monotone" dataKey="value" stroke="#8884d8" fill="#8884d8" name="Memory Usage (%)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-              {/* CPU Usage: BarChart */}
-              <div className="p-4 bg-white border border-gray-200 rounded">
-                <h4 className="font-medium mb-4">CPU Usage Over Time</h4>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={prepareMetricChartData(cpuHistory)}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="value" fill="#e57373" name="CPU Usage (ms)" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              {/* Disk Usage: LineChart */}
-              <div className="p-4 bg-white border border-gray-200 rounded">
-                <h4 className="font-medium mb-4">Disk Usage Over Time</h4>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={prepareMetricChartData(diskHistory)}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="value" stroke="#ffd54f" name="Disk Usage" />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-              {/* Network Usage: ComposedChart (Bar + Line) */}
-              <div className="p-4 bg-white border border-gray-200 rounded">
-                <h4 className="font-medium mb-4">Network Usage Over Time</h4>
-                <ResponsiveContainer width="100%" height={300}>
-                  <ComposedChart data={prepareMetricChartData(networkHistory)}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="value" barSize={20} fill="#4dd0e1" name="Network Usage (Bar)" />
-                    <Line type="monotone" dataKey="value" stroke="#1976d2" name="Network Usage (Line)" />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-              {/* Response Time: LineChart */}
-              <div className="p-4 bg-white border border-gray-200 rounded">
-                <h4 className="font-medium mb-4">Response Time Over Time</h4>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={prepareMetricChartData(responseTimeHistory)}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="value" stroke="#ffb74d" name="Response Time (ms)" />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-              {/* Error Rate: PieChart */}
-              <div className="p-4 bg-white border border-gray-200 rounded">
-                <h4 className="font-medium mb-4">Error Rate Distribution (Last 10)</h4>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={prepareMetricChartData(errorRateHistory)}
-                      dataKey="value"
-                      nameKey="date"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={80}
-                      fill="#e57373"
-                      label={({ name, value }) => `${name}: ${value}%`}
+                <h4 className="font-medium mb-4">System Health Metrics Radar</h4>
+                <ResponsiveContainer width="100%" height={350}>
+                  <RadarChart cx="50%" cy="50%" outerRadius={120} data={prepareSystemHealthRadarData()}
                     >
-                      {prepareMetricChartData(errorRateHistory).map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
+                    <PolarGrid stroke="#e0e7ff" strokeWidth={2} />
+                    <PolarAngleAxis dataKey="metric" tick={{ fill: (d) => radarAxisColor(d), fontWeight: 'bold', fontSize: 15 }} />
+                    <PolarRadiusAxis tick={{ fill: '#bdbdbd', fontWeight: 'bold' }} axisLine={false} />
+                    <Radar name="Value" dataKey="value" stroke="url(#radarStrokeGradient)" fill="url(#radarFillGradient)" fillOpacity={0.8} strokeWidth={4} />
                     <Tooltip />
-                  </PieChart>
+                    <defs>
+                      <linearGradient id="radarFillGradient" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stopColor="#ff6a00" />
+                        <stop offset="50%" stopColor="#43e97b" />
+                        <stop offset="100%" stopColor="#1976d2" />
+                      </linearGradient>
+                      <linearGradient id="radarStrokeGradient" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stopColor="#ff6a00" />
+                        <stop offset="50%" stopColor="#43e97b" />
+                        <stop offset="100%" stopColor="#1976d2" />
+                      </linearGradient>
+                    </defs>
+                  </RadarChart>
                 </ResponsiveContainer>
               </div>
             </div>
@@ -519,3 +445,15 @@ const AdminUtilities = () => {
 };
 
 export default AdminUtilities; 
+
+function radarAxisColor(metric) {
+  switch (metric) {
+    case 'Memory': return '#ff6a00';
+    case 'Cpu': return '#43e97b';
+    case 'Disk': return '#1976d2';
+    case 'Network': return '#ff4081';
+    case 'Response_time': return '#ffd600';
+    case 'Error_rate': return '#d500f9';
+    default: return '#8884d8';
+  }
+} 

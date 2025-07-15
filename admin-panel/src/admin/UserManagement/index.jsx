@@ -2,7 +2,6 @@
 // All permission checks (e.g., self-demote, super admin demote/delete, bulk actions) MUST be enforced on the backend.
 // Frontend checks are for user experience only and are NOT sufficient for security.
 // Ensure all admin actions are also audit-logged on the backend for traceability.
-console.log("UserManagement/index.jsx loaded!");
 import { useEffect, useState, useContext } from 'react';
 import axios from 'axios';
 import { UserContext } from '../../App.jsx';
@@ -21,7 +20,6 @@ const FILTERS = [
 
 export default function UserManagement() {
   const { userAuth } = useContext(UserContext);
-  console.log("[UserManagement] userAuth:", userAuth);
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -39,8 +37,12 @@ export default function UserManagement() {
   const [myRequestsError, setMyRequestsError] = useState('');
   const isSuperAdmin = userAuth?.super_admin;
 
+  // Remove logging from tab click handler
+  const handleTabChange = (tabIndex) => {
+    setActiveTab(tabIndex);
+  };
+
   useEffect(() => {
-    console.log("[UserManagement] useEffect triggered. access_token:", userAuth?.access_token);
     fetchUsers();
     if (isSuperAdmin && activeTab === 1) {
       fetchPendingRequests();
@@ -67,7 +69,6 @@ export default function UserManagement() {
   }, [search, users, filter]);
 
   const fetchUsers = async () => {
-    console.log("[UserManagement] fetchUsers called. userAuth:", userAuth);
     setLoading(true);
     setError(null);
     try {
@@ -149,7 +150,11 @@ export default function UserManagement() {
         { userId, admin: promote },
         { headers: { 'Authorization': `Bearer ${userAuth.access_token}` } }
       );
-      toast.success(`User ${promote ? 'promoted' : 'demoted'} successfully.`);
+      if (userAuth.super_admin) {
+        toast.success(`User ${promote ? 'promoted' : 'demoted'} successfully.`);
+      } else {
+        toast.success('Request submitted successfully.');
+      }
       await fetchUsers(); // Refresh user list
     } catch (err) {
       const msg = err.response?.data?.error || 'Failed to update user role.';
@@ -339,58 +344,56 @@ export default function UserManagement() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto p-8">
-      <h1 className="text-2xl font-bold mb-4">User Management</h1>
+    <div className="w-full max-w-full md:max-w-5xl mx-auto p-2 xs:p-3 sm:p-4 md:p-8">
+      <h1 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4">User Management</h1>
       <InPageNavigation
         routes={isSuperAdmin ? ["Admins & Users", "Requests"] : ["Admins & Users", "My Requests"]}
         defaultActiveIndex={0}
-        onTabChange={setActiveTab}
+        onTabChange={handleTabChange}
       >
         {[
           // Tab 1: User/Admin List
           <div key="users-admins">
-            <div className="mb-4">
+            <div className="mb-3 sm:mb-4">
               {selectedUserIds.length > 0 && userAuth?.super_admin && (
-                <div className="flex gap-2 mb-2 p-2 bg-gray-50 border rounded-lg shadow-sm">
+                <div className="flex flex-col sm:flex-row gap-2 mb-2 p-2 bg-gray-50 border rounded-lg shadow-sm overflow-x-auto">
                   <span className="font-medium">Bulk actions for {selectedUserIds.length} selected:</span>
-                  <button className="px-3 py-1 rounded bg-black text-white" disabled={actionLoading} onClick={() => handleBulkAction('promote')}>Promote</button>
-                  <button className="px-3 py-1 rounded bg-gray-700 text-white" disabled={actionLoading} onClick={() => handleBulkAction('demote')}>Demote</button>
-                  <button className="px-3 py-1 rounded bg-green-600 text-white" disabled={actionLoading} onClick={() => handleBulkAction('activate')}>Activate</button>
-                  <button className="px-3 py-1 rounded bg-yellow-500 text-white" disabled={actionLoading} onClick={() => handleBulkAction('deactivate')}>Deactivate</button>
-                  <button className="px-3 py-1 rounded bg-red-600 text-white" disabled={actionLoading} onClick={() => handleBulkAction('delete')}>Delete</button>
+                  <div className="flex flex-wrap gap-2">
+                    <button className="px-3 py-1 rounded bg-black text-white" disabled={actionLoading} onClick={() => handleBulkAction('promote')}>Promote</button>
+                    <button className="px-3 py-1 rounded bg-gray-700 text-white" disabled={actionLoading} onClick={() => handleBulkAction('demote')}>Demote</button>
+                    <button className="px-3 py-1 rounded bg-green-600 text-white" disabled={actionLoading} onClick={() => handleBulkAction('activate')}>Activate</button>
+                    <button className="px-3 py-1 rounded bg-yellow-500 text-white" disabled={actionLoading} onClick={() => handleBulkAction('deactivate')}>Deactivate</button>
+                    <button className="px-3 py-1 rounded bg-red text-white" disabled={actionLoading} onClick={() => handleBulkAction('delete')}>Delete</button>
+                  </div>
                 </div>
               )}
-              <AdminUserSearchBar value={search} onChange={handleSearch} />
+              <div className="w-full overflow-x-auto">
+                <AdminUserSearchBar value={search} onChange={handleSearch} />
+              </div>
             </div>
-            <div className="flex gap-2 mb-4">
-              {FILTERS.map(f => (
-                <button
-                  key={f.value}
-                  className={`px-3 py-1 rounded-full font-medium focus:outline-none ${filter === f.value ? f.color : 'bg-gray-100 text-gray-700'}`}
-                  onClick={() => handleFilter(f.value)}
-                >
-                  {f.label}
-                </button>
-              ))}
+            <div className="w-full overflow-x-auto">
+              {(() => {
+                const validFilteredUsers = filteredUsers.filter(u => u && u._id);
+                return (
+                  <AdminUserTable
+                    users={validFilteredUsers}
+                    userAuth={userAuth}
+                    superAdmin={isSuperAdmin}
+                    loading={loading}
+                    error={error}
+                    selectedUserIds={selectedUserIds}
+                    onSelectUser={handleSelectUser}
+                    onSelectAll={handleSelectAll}
+                    onPromoteDemote={handlePromoteDemote}
+                    onActivateDeactivate={handleActivateDeactivate}
+                    onDeleteUser={handleDeleteUser}
+                    actionLoading={actionLoading}
+                    filter={filter}
+                    onFilter={handleFilter}
+                  />
+                );
+              })()}
             </div>
-            {loading ? (
-              <Loader />
-            ) : error ? (
-              <div className="text-red-500 text-center my-8">{error}</div>
-            ) : (
-              <AdminUserTable
-                users={filteredUsers}
-                userAuth={userAuth}
-                actionLoading={actionLoading}
-                superAdmin={userAuth?.super_admin}
-                handlePromoteDemote={handlePromoteDemote}
-                handleActivateDeactivate={handleActivateDeactivate}
-                handleDeleteUser={handleDeleteUser}
-                selectedUserIds={selectedUserIds}
-                onSelectUser={handleSelectUser}
-                onSelectAll={handleSelectAll}
-              />
-            )}
           </div>,
           // Tab 2: Requests (Super Admin) or My Requests (Admin)
           isSuperAdmin ? (

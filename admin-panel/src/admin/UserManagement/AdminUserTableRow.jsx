@@ -9,7 +9,23 @@ const adminIcon = (
   <svg className="w-4 h-4" style={{color: 'black'}} fill="none" stroke="black" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
 );
 
-export default function AdminUserTableRow({ user, userAuth, actionLoading, superAdmin, handlePromoteDemote, handleActivateDeactivate, handleDeleteUser, rowIndex, serial, isSelected, onSelectUser }) {
+export default function AdminUserTableRow(props) {
+  const { user } = props;
+  if (!user || !user._id) {
+    console.warn('AdminUserTableRow: invalid user', user);
+    return null;
+  }
+  const userAuth = props.userAuth;
+  const actionLoading = props.actionLoading;
+  const superAdmin = props.superAdmin;
+  const handlePromoteDemote = props.handlePromoteDemote;
+  const handleActivateDeactivate = props.handleActivateDeactivate;
+  const handleDeleteUser = props.handleDeleteUser;
+  const rowIndex = props.rowIndex;
+  const serial = props.serial;
+  const isSelected = props.isSelected;
+  const onSelectUser = props.onSelectUser;
+
   const isSelf = user._id === userAuth._id;
   const isSuper = user.super_admin;
   const isAdmin = user.admin;
@@ -17,8 +33,8 @@ export default function AdminUserTableRow({ user, userAuth, actionLoading, super
   const zebraClass = !isSuperAdminRow && rowIndex % 2 === 1 ? "bg-gray-50" : "";
   return (
     <tr
-      className={`transition ${isSuperAdminRow ? "bg-yellow-50 border-l-4 border-yellow-400" : "hover:bg-gray-50"} ${zebraClass}`}
-      style={isSuperAdminRow ? { boxShadow: '0 2px 8px 0 #ffe06633' } : {}}
+      className={`transition ${isSuperAdminRow ? "bg-yellow-50 border-l-4 border-yellow-400" : ""} ${zebraClass}`}
+      style={isSuperAdminRow ? { boxShadow: '0 2px 8px 0 #ffe06633', backgroundColor: (typeof document !== 'undefined' && document.body.getAttribute('data-theme') === 'dark' ? '#3a3a3a' : '#fffbe6') } : {}}
     >
       {superAdmin && (
         <td className="p-4 align-middle text-center">
@@ -41,6 +57,9 @@ export default function AdminUserTableRow({ user, userAuth, actionLoading, super
         {isSelf && <span className="ml-2 text-xs text-gray-400">(You)</span>}
       </td>
       <td className="p-4 align-middle break-all">{user.personal_info?.email}</td>
+      <td className="p-4 align-middle">
+        <AdminUserStatusBadge user={user} />
+      </td>
       <td className="p-4 align-middle">
         <span className={`inline-flex items-center gap-1 px-3 py-1 text-xs rounded-full shadow-sm border ${isAdmin ? 'bg-white text-black border-black mr-2 drop-shadow-sm' : 'bg-gray-200 text-gray-500 border-gray-300'}`}
           title={isAdmin ? 'Admin' : 'User'}>

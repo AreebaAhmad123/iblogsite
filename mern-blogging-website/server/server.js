@@ -70,7 +70,7 @@ server.use(cors({
     }
   },
   credentials: true, // Allow cookies and credentials
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token', 'X-Content-Type-Options', 'X-Frame-Options'],
   exposedHeaders: ['X-Total-Count']
 }));
@@ -91,7 +91,7 @@ server.options('*', cors({
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token', 'X-Content-Type-Options', 'X-Frame-Options'],
   exposedHeaders: ['X-Total-Count']
 }));
@@ -331,7 +331,7 @@ const verifyJWT = async (req, res, next) => {
             return res.status(401).json({ error: "Invalid token type" });
         }
         // Always fetch user from DB to get current admin status
-        const user = await User.findById(decoded.id).select('_id admin super_admin verified');
+        const user = await User.findById(decoded.id).select('_id admin super_admin verified active');
         if (!user) {
             console.warn('[verifyJWT] User does not exist:', decoded.id);
             return res.status(401).json({ error: "User does not exist" });
@@ -339,6 +339,9 @@ const verifyJWT = async (req, res, next) => {
         if (!user.verified) {
             console.warn('[verifyJWT] User account not verified:', decoded.id);
             return res.status(401).json({ error: "User account not verified" });
+        }
+        if (!user.active) {
+            return res.status(403).json({ error: "Your account is deactivated. Please contact support or an admin." });
         }
         req.user = decoded.id;
         req.admin = user.admin || user.super_admin; // Allow super_admin as admin
@@ -590,7 +593,10 @@ server.post("/api/login", csrfProtection, csrfErrorHandler, validateLoginInput, 
 
         const user = await User.findOne({ "personal_info.email": email.toLowerCase() });
         if (!user) {
-            return res.status(404).json({ error: "Email not found" });
+            return res.status(404).json({ error: "User not found." });
+        }
+        if (!user.active) {
+            return res.status(403).json({ error: "Your account is deactivated. Please contact support or an admin." });
         }
 
         // Prevent Google-auth users from logging in with password
@@ -1043,10 +1049,11 @@ server.post("/api/delete-blog", verifyJWT, requireAdmin, async (req, res) => {
             }
         }
 
+        console.log(`[BLOG DELETE] Admin: ${user_id}, Blog ID: ${blogId}, Title: ${blog.title}`);
         return res.status(200).json({ status: 'done' });
     } catch (err) {
         console.error('Error deleting blog:', err);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: "Failed to delete blog. Please try again or contact support if the problem persists." });
     }
 });
 
@@ -1237,6 +1244,7 @@ server.post("/api/get-blog", async (req, res) => {
     try {
         let { blog_id, draft = false, mode } = req.body;
         let user_id = null;
+        let isAdmin = false;
         let isLikedByUser = false;
 
         // Check if user is authenticated
@@ -1249,6 +1257,9 @@ server.post("/api/get-blog", async (req, res) => {
                     issuer: JWT_ISSUER
                 });
                 user_id = decoded.id;
+                // Fetch user to check admin status
+                const user = await User.findById(user_id).select('admin super_admin');
+                isAdmin = user && (user.admin || user.super_admin);
             } catch (err) {
                 // Token is invalid, but we can still fetch the blog
                 console.log("Invalid token, fetching blog without user context");
@@ -1259,7 +1270,11 @@ server.post("/api/get-blog", async (req, res) => {
         let query = { blog_id };
         if (mode === 'edit') {
             // For editing, allow drafts and published blogs
-            query = { blog_id };
+            // If not admin, only allow author to edit
+            if (!isAdmin) {
+                query = { blog_id, author: user_id };
+            }
+            // If admin, allow any blog
         } else {
             // For viewing, only show published blogs unless user is author
             query = { blog_id, draft: false };
@@ -1372,18 +1387,13 @@ server.post("/api/create-blog", verifyJWT, requireAdmin, async (req, res) => {
             if (!Array.isArray(content)) {
                 content = [content];
             }
-            
-            // Ensure each content item has the required structure
-            content = content.map(item => {
-                if (typeof item === 'object' && item !== null) {
-                    return {
-                        time: item.time || Date.now(),
-                        blocks: Array.isArray(item.blocks) ? item.blocks : [],
-                        version: item.version || '2.27.2'
-                    };
-                }
-                return { time: Date.now(), blocks: [], version: '2.27.2' };
-            });
+            // Always use only the first content block
+            const first = content[0] && typeof content[0] === 'object' ? content[0] : { time: Date.now(), blocks: [], version: '2.27.2' };
+            content = [{
+                time: first.time || Date.now(),
+                blocks: Array.isArray(first.blocks) ? first.blocks : [],
+                version: first.version || '2.27.2'
+            }];
         } else {
             content = [{ time: Date.now(), blocks: [], version: '2.27.2' }];
         }
@@ -1401,7 +1411,9 @@ server.post("/api/create-blog", verifyJWT, requireAdmin, async (req, res) => {
 
         // Filter out empty tags
         if (Array.isArray(tags)) {
-            tags = tags.filter(tag => typeof tag === 'string' && tag.trim().length > 0);
+            tags = tags
+                .filter(tag => typeof tag === 'string' && tag.trim().length > 0)
+                .map(tag => tag.trim().toLowerCase());
         } else {
             tags = [];
         }
@@ -1439,7 +1451,7 @@ server.post("/api/create-blog", verifyJWT, requireAdmin, async (req, res) => {
 
             console.log('Blog object created, about to save...');
             await blog.save();
-            console.log('Blog saved successfully with blog_id:', blog.blog_id);
+            console.log(`[BLOG CREATE] User: ${user_id}, Blog ID: ${blog.blog_id}, Title: ${blog.title}`);
 
             // Add blog to user's blogs array and increment total_posts
             await User.findOneAndUpdate(
@@ -1452,16 +1464,16 @@ server.post("/api/create-blog", verifyJWT, requireAdmin, async (req, res) => {
     } catch (err) {
         console.error("Error creating/updating blog:", err);
         if (err.code === 11000) {
-            return res.status(400).json({ error: "Blog ID already exists. Please try again." });
+            return res.status(400).json({ error: "A blog with this ID already exists. Please use a different title or try again later." });
         }
         if (err.name === 'ValidationError') {
             const validationErrors = Object.values(err.errors).map(e => e.message);
-            return res.status(400).json({ error: validationErrors.join(', ') });
+            return res.status(400).json({ error: `Validation failed: ${validationErrors.join('; ')}` });
         }
         if (err.name === 'CastError') {
-            return res.status(400).json({ error: "Invalid data format provided" });
+            return res.status(400).json({ error: "Some of the provided data is invalid. Please check your input and try again." });
         }
-        return res.status(500).json({ error: "Failed to save blog. Please try again." });
+        return res.status(500).json({ error: "An unexpected error occurred while saving your blog. Please try again or contact support if the problem persists." });
     }
 });
 
@@ -1473,7 +1485,12 @@ server.put("/api/update-blog/:blogId", verifyJWT, requireAdmin, async (req, res)
         let { blogId } = req.params;
 
         // Find the blog and verify ownership
-        const blog = await Blog.findOne({ blog_id: blogId, author: user_id });
+        let blog;
+        if (req.admin || req.super_admin) {
+            blog = await Blog.findOne({ blog_id: blogId });
+        } else {
+            blog = await Blog.findOne({ blog_id: blogId, author: user_id });
+        }
         if (!blog) {
             return res.status(404).json({ error: "Blog not found or you don't have permission to edit it" });
         }
@@ -1549,7 +1566,9 @@ server.put("/api/update-blog/:blogId", verifyJWT, requireAdmin, async (req, res)
 
         // Filter out empty tags
         if (Array.isArray(tags)) {
-            tags = tags.filter(tag => typeof tag === 'string' && tag.trim().length > 0);
+            tags = tags
+                .filter(tag => typeof tag === 'string' && tag.trim().length > 0)
+                .map(tag => tag.trim().toLowerCase());
         } else {
             tags = [];
         }
@@ -1563,6 +1582,7 @@ server.put("/api/update-blog/:blogId", verifyJWT, requireAdmin, async (req, res)
         blog.draft = draft !== undefined ? draft : blog.draft;
 
         await blog.save();
+        console.log(`[BLOG UPDATE] User: ${user_id}, Blog ID: ${blog.blog_id}, Title: ${blog.title}`);
 
         return res.status(200).json({ blog_id: blog.blog_id });
     } catch (err) {
@@ -2202,6 +2222,10 @@ server.post('/api/google-auth', async (req, res) => {
 
         let user = await User.findOne({ "personal_info.email": email });
 
+        if (user && !user.active) {
+            return res.status(403).json({ error: "Your account is deactivated. Please contact support or an admin." });
+        }
+
         if (user) {
             if (!user.google_auth) {
                 return res.status(403).json({ error: "This account was created with a password. Please use your email and password to log in." });
@@ -2229,12 +2253,12 @@ server.post('/api/google-auth', async (req, res) => {
             // Notify all admins about new user registration
             const admins = await User.find({ $or: [ { admin: true }, { super_admin: true } ] });
             for (const admin of admins) {
-                await new Notification({
+                await Notification.create({
                     type: 'new_user',
                     notification_for: admin._id,
                     for_role: 'admin',
                     user: user._id
-                }).save();
+                });
             }
         }
         // Generate tokens
@@ -2484,6 +2508,16 @@ server.get('/api/verify-user', async (req, res) => {
         user.verified = true;
         user.verificationToken = undefined;
         await user.save();
+        // Notify all admins about new user registration
+        const admins = await User.find({ $or: [ { admin: true }, { super_admin: true } ] });
+        for (const admin of admins) {
+            await Notification.create({
+                type: 'new_user',
+                notification_for: admin._id,
+                for_role: 'admin',
+                user: user._id
+            });
+        }
         // Generate JWT and return user info for auto-login
         const access_token = jwt.sign(
             { id: user._id, admin: user.admin || user.super_admin, super_admin: user.super_admin, iat: Math.floor(Date.now() / 1000), type: 'access' },
@@ -2645,11 +2679,16 @@ server.get("/api/admin/users", verifyJWT, requireAdmin, async (req, res) => {
     let limit = parseInt(req.query.limit) || 10;
     let skip = (page - 1) * limit;
 
-    const totalUsers = await User.countDocuments();
-    const users = await User.find({}, {
+    const showDeleted = req.query.showDeleted === 'true';
+    const userQuery = showDeleted ? {} : { deleted: { $ne: true } };
+
+    const totalUsers = await User.countDocuments(userQuery);
+    const users = await User.find(userQuery, {
       _id: 1,
       admin: 1,
       super_admin: 1,
+      active: 1,
+      deleted: 1,
       "personal_info.fullname": 1,
       "personal_info.username": 1,
       "personal_info.email": 1
@@ -2671,6 +2710,14 @@ const SET_ADMIN_RATE_LIMIT_WINDOW = 10 * 1000; // 10 seconds in ms (for testing)
 server.post("/api/admin/set-admin", verifyJWT, async (req, res) => {
   const { userId, admin, reason } = req.body;
   const requestingUserId = req.user;
+  // In-memory rate limiting logic
+  const now = Date.now();
+  const lastRequest = setAdminRateLimit.get(requestingUserId);
+  if (lastRequest && now - lastRequest < SET_ADMIN_RATE_LIMIT_WINDOW) {
+    const retryAfter = Math.ceil((SET_ADMIN_RATE_LIMIT_WINDOW - (now - lastRequest)) / 1000);
+    return res.status(429).json({ error: `Too many requests. Please wait ${retryAfter} seconds before trying again.` });
+  }
+  setAdminRateLimit.set(requestingUserId, now);
   console.log("[set-admin] Request received:", { userId, admin });
   if (typeof admin !== "boolean" || !userId) {
     console.log("[set-admin] Invalid request body", req.body);
@@ -2678,23 +2725,30 @@ server.post("/api/admin/set-admin", verifyJWT, async (req, res) => {
   }
   try {
     const requestingUser = await User.findById(req.user);
-    console.log("[set-admin] Requesting user:", requestingUser && requestingUser.personal_info);
+    const targetUser = await User.findById(userId);
     if (!requestingUser) {
-      console.log("[set-admin] Not authenticated");
       return res.status(401).json({ error: 'Not authenticated' });
+    }
+    if (!requestingUser.admin && !requestingUser.super_admin) {
+      return res.status(403).json({ error: "Only admins or super admins can promote/demote users." });
+    }
+    if (!targetUser) {
+      return res.status(404).json({ error: "Target user not found" });
+    }
+    // Prevent demoting or promoting a super admin (except self-demotion is already blocked)
+    if (targetUser.super_admin) {
+      return res.status(403).json({ error: "Cannot promote or demote a super admin." });
     }
     // Only super admin can promote/demote directly
     if (requestingUser.super_admin) {
       if (req.userData && req.userData.id === userId && admin === false && requestingUser.super_admin) {
-        console.log("[set-admin] Attempted self-demotion by super admin");
         return res.status(400).json({ error: "You cannot demote yourself." });
       }
       const user = await User.findByIdAndUpdate(userId, { admin }, { new: true });
-      console.log("[set-admin] Super admin updated user:", user && user.personal_info);
       if (!user) return res.status(404).json({ error: "User not found" });
       return res.json({ success: true, user: { _id: user._id, admin: user.admin } });
     } else {
-      // Non-super-admin: create a pending request in the DB
+      // Non-super-admin: prevent duplicate pending requests
       const existingPending = await AdminStatusChangeRequest.findOne({
         requestingUser: requestingUser._id,
         targetUser: userId,
@@ -2702,72 +2756,30 @@ server.post("/api/admin/set-admin", verifyJWT, async (req, res) => {
         status: 'pending'
       });
       if (existingPending) {
-        return res.status(429).json({ error: 'A similar pending request already exists.' });
+        return res.status(400).json({ error: 'You have already submitted a pending request for this action on this user.' });
       }
-      const newRequest = await AdminStatusChangeRequest.create({
+      // Non-super-admin: create a pending request in the DB
+      const statusChangeRequest = await AdminStatusChangeRequest.create({
         requestingUser: requestingUser._id,
         targetUser: userId,
         action: admin ? 'promote' : 'demote',
         reason: reason || ''
       });
-      // Send notification email to super admins (for awareness, not approval)
-      try {
-        if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_EMAIL_PASSWORD) {
-          console.error('ADMIN_EMAIL or ADMIN_EMAIL_PASSWORD environment variable is not set.');
-          await AdminStatusChangeRequest.findByIdAndUpdate(newRequest._id, { $set: { notes: 'Email not sent: missing ADMIN_EMAIL or ADMIN_EMAIL_PASSWORD env variable.' } });
-          return res.status(500).json({ error: 'Request created, but email notification could not be sent due to missing email configuration.' });
-        }
-        const superAdmins = await User.find({ super_admin: true });
-        const superAdminEmails = superAdmins.map(u => u.personal_info.email).filter(Boolean);
-        console.log('[set-admin] Super admin emails:', superAdminEmails);
-        const targetUser = await User.findById(userId);
-        // In-app notification for all super admins
-        for (const superAdmin of superAdmins) {
-          await new Notification({
-            type: 'admin_status_request',
-            notification_for: superAdmin._id,
-            user: requestingUser._id,
-            for_role: 'super_admin',
-            comment: undefined,
-            blog: undefined,
-            reply: undefined,
-            replied_on_comment: undefined
-          }).save();
-        }
-        if (superAdminEmails.length && targetUser) {
-          const transporter = nodemailer.createTransport({
-            service: 'gmail',
-            auth: {
-              user: process.env.ADMIN_EMAIL,
-              pass: process.env.ADMIN_EMAIL_PASSWORD
-            }
-          });
-          const mailOptions = {
-            from: process.env.ADMIN_EMAIL,
-            to: superAdminEmails.join(','),
-            subject: 'Admin Status Change Request (Pending Approval)',
-            text: `User ${requestingUser.personal_info.fullname} (${requestingUser.personal_info.email}) requested to ${admin ? 'promote' : 'demote'} user ${targetUser.personal_info.fullname} (${targetUser.personal_info.email}) to admin status.\n\nPlease review and take action in the admin panel.`
-          };
-          console.log('[set-admin] Email mailOptions:', mailOptions);
-          try {
-            const info = await transporter.sendMail(mailOptions);
-            console.log('[set-admin] Nodemailer sendMail response:', info);
-          } catch (sendErr) {
-            console.error('[set-admin] Error sending email:', sendErr);
-            await AdminStatusChangeRequest.findByIdAndUpdate(newRequest._id, { $set: { notes: 'Failed to send notification email to super admins. Error: ' + sendErr.message } });
-            return res.status(500).json({ error: 'Request created, but failed to notify super admins by email.' });
-          }
-        } else {
-          console.error('[set-admin] No valid super admin emails found or target user missing.');
-          await AdminStatusChangeRequest.findByIdAndUpdate(newRequest._id, { $set: { notes: 'No valid super admin emails found or target user missing.' } });
-        }
-      } catch (emailErr) {
-        // Update request with note about email failure
-        console.error('[set-admin] Outer catch error:', emailErr);
-        await AdminStatusChangeRequest.findByIdAndUpdate(newRequest._id, { $set: { notes: 'Failed to send notification email to super admins. Outer error: ' + emailErr.message } });
-        return res.status(500).json({ error: 'Request created, but failed to notify super admins by email.' });
+      // Notify all super admins of the new request
+      const superAdmins = await User.find({ super_admin: true });
+      for (const superAdmin of superAdmins) {
+        await Notification.create({
+          type: 'admin_status_change_request',
+          notification_for: superAdmin._id,
+          user: requestingUser._id,
+          for_role: 'super_admin',
+          // Optionally, add more info
+          targetUser: userId,
+          action: admin ? 'promote' : 'demote',
+          statusChangeRequest: statusChangeRequest._id
+        });
       }
-      return res.status(200).json({ success: false, message: 'Request created. Awaiting super admin approval.' });
+      return res.status(200).json({ success: true, message: 'Request submitted for super admin approval.' });
     }
   } catch (err) {
     console.error("[set-admin] Admin status update error:", err);
@@ -3048,6 +3060,15 @@ server.post("/api/admin/bulk-user-action", verifyJWT, requireAdmin, async (req, 
         result.failed.push({ userId, reason: "Cannot demote yourself." });
         continue;
       }
+      if (userId === requestingUserId && action === 'delete') {
+        result.failed.push({ userId, reason: "Cannot delete yourself." });
+        continue;
+      }
+      const targetUser = await User.findById(userId);
+      if (targetUser && targetUser.super_admin) {
+        result.failed.push({ userId, reason: "Cannot demote or delete a super admin." });
+        continue;
+      }
       try {
         if (action === 'promote') {
           await User.findByIdAndUpdate(userId, { admin: true });
@@ -3056,7 +3077,15 @@ server.post("/api/admin/bulk-user-action", verifyJWT, requireAdmin, async (req, 
           await User.findByIdAndUpdate(userId, { admin: false });
           result.success.push({ userId, action: 'demoted' });
         } else if (action === 'delete') {
-          await User.findByIdAndDelete(userId);
+          await User.findByIdAndUpdate(userId, { deleted: true });
+          // Audit log
+          await MaintenanceLog.create({
+            action: 'user_soft_delete',
+            performedBy: requestingUserId,
+            targetUser: userId,
+            timestamp: new Date(),
+            details: `User ${userId} soft deleted by ${requestingUserId}`
+          });
           result.success.push({ userId, action: 'deleted' });
         } else {
           result.failed.push({ userId, reason: 'Unknown action' });
@@ -3128,10 +3157,13 @@ server.post("/api/admin/database-maintenance", verifyJWT, requireAdmin, async (r
         let optimizedIndexes = 0;
         for (const col of collections) {
             try {
-                await mongoose.connection.db.collection(col.name).reIndex();
-                optimizedIndexes++;
+                if (mongoose.connection.db.collection(col.name).reIndex) {
+                    await mongoose.connection.db.collection(col.name).reIndex();
+                    optimizedIndexes++;
+                }
             } catch (err) {
-                // Some system collections may not support reIndex
+                // Log and skip reIndex errors (common on MongoDB Atlas)
+                console.warn(`Could not reIndex collection ${col.name}:`, err.message);
             }
         }
 
@@ -3191,7 +3223,7 @@ server.post("/api/admin/database-maintenance", verifyJWT, requireAdmin, async (r
         });
     } catch (err) {
         console.error('Database maintenance error:', err);
-        return res.status(500).json({ error: 'Database maintenance failed.' });
+        return res.status(500).json({ error: 'Database maintenance failed: ' + (err && err.message ? err.message : err) });
     }
 });
 
@@ -3377,7 +3409,7 @@ server.get("/api/admin/system-health", verifyJWT, requireAdmin, async (req, res)
 
         // --- Env Vars ---
         const requiredEnvVars = [
-            'MONGODB_URI',
+            'MONGO_URI',
             'SECRET_ACCESS_KEY',
             'ADMIN_EMAIL',
             'ADMIN_EMAIL_PASSWORD'
@@ -3726,5 +3758,74 @@ server.patch("/api/admin/newsletter-subscriber/:id", verifyJWT, requireAdmin, as
     } catch (err) {
         console.error("Error updating newsletter subscriber:", err);
         res.status(500).json({ error: "Failed to update subscriber." });
+    }
+});
+
+// === USER ACTIVATION/DEACTIVATION ENDPOINT ===
+server.patch("/api/admin/user-status", verifyJWT, requireAdmin, async (req, res) => {
+  const { userId, active } = req.body;
+  if (typeof active !== "boolean" || !userId) {
+    return res.status(400).json({ error: "userId and active (boolean) are required." });
+  }
+  try {
+    const requestingUser = await User.findById(req.user);
+    const targetUser = await User.findById(userId);
+    if (!targetUser) {
+      return res.status(404).json({ error: "Target user not found." });
+    }
+    // Prevent self-activation/deactivation
+    if (req.user === userId) {
+      return res.status(403).json({ error: "You cannot change your own active status." });
+    }
+    // Prevent non-super-admins from activating/deactivating super admins
+    if (targetUser.super_admin && !requestingUser.super_admin) {
+      return res.status(403).json({ error: "Only super admins can change the status of a super admin." });
+    }
+    // Prevent deactivating another super admin (even by super admin)
+    if (targetUser.super_admin && !active) {
+      return res.status(403).json({ error: "Super admins cannot be deactivated." });
+    }
+    targetUser.active = active;
+    await targetUser.save();
+    return res.json({ success: true, user: { _id: targetUser._id, active: targetUser.active } });
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to update user status." });
+  }
+});
+
+// === SINGLE USER SOFT DELETE ENDPOINT ===
+server.delete("/api/admin/user/:id", verifyJWT, requireAdmin, async (req, res) => {
+  const userId = req.params.id;
+  const requestingUserId = req.user;
+  try {
+    const requestingUser = await User.findById(requestingUserId);
+    if (!requestingUser || !requestingUser.super_admin) {
+      return res.status(403).json({ error: "Only super admins can delete users." });
+    }
+    if (userId === requestingUserId) {
+      return res.status(403).json({ error: "Cannot delete yourself." });
+    }
+    const targetUser = await User.findById(userId);
+    if (!targetUser) {
+      return res.status(404).json({ error: "User not found." });
+    }
+    if (targetUser.super_admin) {
+      return res.status(403).json({ error: "Cannot delete a super admin." });
+    }
+    if (targetUser.deleted) {
+      return res.status(400).json({ error: "User is already deleted." });
+    }
+    targetUser.deleted = true;
+    await targetUser.save();
+    await MaintenanceLog.create({
+      action: 'user_soft_delete',
+      performedBy: requestingUserId,
+      targetUser: userId,
+      timestamp: new Date(),
+      details: `User ${userId} soft deleted by ${requestingUserId}`
+    });
+    return res.json({ success: true, userId });
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to delete user." });
     }
 });

@@ -6,7 +6,7 @@ import Loader from "../components/loader.component";
 import { BlogContext } from "../pages/blog.page";
 import InPageNavigation from "../components/inpage-navigation.component";
 // Add Recharts imports
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell, PieChart, Pie } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell, PieChart, Pie, AreaChart, Area, ComposedChart } from 'recharts';
 
 const blogStructure = {
   title: "",
@@ -197,7 +197,7 @@ const AdminComments = () => {
   }, []);
 
   return (
-    <div className="max-w-4xl mx-auto p-8">
+    <div className="w-full max-w-full md:max-w-4xl mx-auto p-2 xs:p-3 sm:p-4 md:p-8">
       <h1 className="text-2xl font-normal mb-6">Comments Moderation</h1>
       
       <InPageNavigation routes={["Blog Comments", "Spam Comments", "Analytics"]} defaultActiveIndex={0}>
@@ -209,7 +209,7 @@ const AdminComments = () => {
               placeholder="Search blog by title or ID..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full px-4 py-2 border rounded mb-2"
+              className="w-full px-4 py-2 border rounded mb-2 bg-white text-black dark:bg-black dark:text-white dark:border-gray-700"
             />
             {loadingBlogs ? (
               <Loader />
@@ -321,13 +321,13 @@ const AdminComments = () => {
                     <p className="text-3xl font-bold text-purple-600">{(commentAnalytics.avgCommentsPerBlog || 0).toFixed(1)}</p>
                   </div>
                 </div>
-                {/* Recent Activity Chart */}
+                {/* Combined Area + Bar Chart for Comments Analytics Overview */}
                 {commentAnalytics.recentActivity && commentAnalytics.recentActivity.length > 0 && (
                   <div className="mt-8">
-                    <h3 className="text-lg font-medium mb-4">Recent Comment Activity (Last {commentAnalytics.recentActivity.length} Comments)</h3>
+                    <h3 className="text-lg font-medium mb-4">Comments Analytics Overview</h3>
                     <div className="bg-white p-4 rounded border">
-                      <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={commentAnalytics.recentActivity.map(c => ({
+                      <ResponsiveContainer width="100%" height={350}>
+                        <ComposedChart data={commentAnalytics.recentActivity.map(c => ({
                           date: new Date(c.commentedAt).toLocaleDateString(),
                           count: 1
                         })).reduce((acc, curr) => {
@@ -337,9 +337,9 @@ const AdminComments = () => {
                           return acc;
                         }, [])}>
                           <defs>
-                            <linearGradient id="colorBar" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#42a5f5" stopOpacity={0.9}/>
-                              <stop offset="100%" stopColor="#7e57c2" stopOpacity={0.7}/>
+                            <linearGradient id="colorArea" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#42a5f5" stopOpacity={0.8}/>
+                              <stop offset="100%" stopColor="#7e57c2" stopOpacity={0.2}/>
                             </linearGradient>
                           </defs>
                           <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
@@ -347,60 +347,16 @@ const AdminComments = () => {
                           <YAxis allowDecimals={false} tick={{ fill: '#555', fontSize: 13 }} />
                           <Tooltip contentStyle={{ background: '#fff', border: '1px solid #42a5f5', borderRadius: 8, color: '#333' }} cursor={{ fill: '#f5f5f5' }} />
                           <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ color: '#555' }} />
-                          <Bar dataKey="count" name="Comments" fill="url(#colorBar)" radius={[8, 8, 0, 0]}>
-                            {commentAnalytics.recentActivity.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={barColors[index % barColors.length]} />
-                            ))}
-                          </Bar>
-                        </BarChart>
+                          <Bar dataKey="count" name="Comments (Bar)" fill="#42a5f5" radius={[8, 8, 0, 0]} barSize={30} />
+                          <Area type="monotone" dataKey="count" stroke="#7e57c2" fill="url(#colorArea)" name="Comments (Trend)" strokeWidth={3} dot={{ r: 4, fill: '#7e57c2', stroke: '#fff', strokeWidth: 2 }} />
+                        </ComposedChart>
                       </ResponsiveContainer>
                     </div>
                   </div>
                 )}
                 {commentAnalytics.recentActivity && commentAnalytics.recentActivity.length > 0 && (
                   <div className="mt-8">
-                    <h3 className="text-lg font-medium mb-4">Comments Distribution by Blog (Pie Chart)</h3>
-                    <div className="bg-white p-4 rounded border">
-                      <ResponsiveContainer width="100%" height={300}>
-                        <PieChart>
-                          <Pie
-                            data={(() => {
-                              // Group by blog title or id
-                              const counts = {};
-                              commentAnalytics.recentActivity.forEach(c => {
-                                const blogName = c.blog_id?.title || c.blog_id?.blog_id || 'Unknown Blog';
-                                counts[blogName] = (counts[blogName] || 0) + 1;
-                              });
-                              return Object.entries(counts).map(([name, value]) => ({ name, value }));
-                            })()}
-                            dataKey="value"
-                            nameKey="name"
-                            cx="50%"
-                            cy="50%"
-                            outerRadius={100}
-                            fill="#42a5f5"
-                            label={({ name, value, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
-                          >
-                            {(() => {
-                              const counts = {};
-                              commentAnalytics.recentActivity.forEach(c => {
-                                const blogName = c.blog_id?.title || c.blog_id?.blog_id || 'Unknown Blog';
-                                counts[blogName] = (counts[blogName] || 0) + 1;
-                              });
-                              return Object.entries(counts).map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={pieColors[index % pieColors.length]} />
-                              ));
-                            })()}
-                          </Pie>
-                          <Tooltip formatter={(value, name, props) => [`${value} comment(s)`, 'Comments']} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                )}
-                {commentAnalytics.recentActivity && commentAnalytics.recentActivity.length > 0 && (
-                  <div className="mt-8">
-                    <h3 className="text-lg font-medium mb-4">Recent Activity</h3>
+                    <h3 className="text-lg font-medium mb-4">Recent Comment Activity</h3>
                     <div className="space-y-2">
                       {commentAnalytics.recentActivity.map((comment, idx) => (
                         <div key={comment._id || idx} className="bg-white p-4 rounded border">

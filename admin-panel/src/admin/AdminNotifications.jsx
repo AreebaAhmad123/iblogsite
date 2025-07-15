@@ -16,7 +16,18 @@ const AdminNotifications = () => {
   const tabRefs = useRef([]);
 
   const isAdmin = userAuth?.admin === true || userAuth?.super_admin === true;
-  const filters = isAdmin ? ['all', 'like', 'comment', 'reply', 'new_user'] : ['reply'];
+  const isSuperAdmin = userAuth?.super_admin === true;
+  const filters = isSuperAdmin
+    ? ['all', 'like', 'comment', 'reply', 'new_user', 'admin_status_change_request']
+    : isAdmin
+    ? ['all', 'like', 'comment', 'reply', 'new_user']
+    : ['reply'];
+
+  const tabLabels = isSuperAdmin
+    ? ["All", "Likes", "Comments", "Replies", "New Users", "Requests"]
+    : isAdmin
+    ? ["All", "Likes", "Comments", "Replies", "New Users"]
+    : ["Replies"];
 
   const fetchNotifications = ({ page, deletedDocCount = 0 }) => {
     setLoading(true);
@@ -92,15 +103,14 @@ const AdminNotifications = () => {
   };
 
   return (
-    <div className="max-w-3xl mx-auto p-8">
-      <h1 className="text-2xl font-medium mb-6">All Notifications</h1>
-      
-      <div className="relative mb-8 bg-white border-b border-grey flex flex-nowrap overflow-x-auto">
-        {["All", "Likes", "Comments", "Replies", "New Users"].map((route, i) => (
+    <div className="w-full max-w-full md:max-w-3xl mx-auto p-2 xs:p-3 sm:p-4 md:p-8">
+      <h1 className="text-xl sm:text-2xl font-medium mb-4 sm:mb-6">All Notifications</h1>
+      <div className="relative mb-4 sm:mb-8 bg-white border-b border-grey flex flex-nowrap overflow-x-auto">
+        { tabLabels.map((route, i) => (
           <button
             ref={el => tabRefs.current[i] = el}
             key={i}
-            className={`p-4 px-5 capitalize ${
+            className={`p-2 sm:p-4 px-3 sm:px-5 capitalize ${
               activeTabIndex === i ? "text-black " : "text-dark-grey "
             }`}
             onClick={() => handleTabChange(i)}
@@ -113,8 +123,9 @@ const AdminNotifications = () => {
           left: tabRefs.current[activeTabIndex]?.offsetLeft + "px"
         }} />
       </div>
-      
-      {renderNotificationsTab(filter)}
+      <div className="space-y-4 sm:space-y-6">
+        {renderNotificationsTab(filter)}
+      </div>
     </div>
   );
 };

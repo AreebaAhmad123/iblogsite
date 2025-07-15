@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import getDay from '../common/date'
 import { UserContext } from '../App'
 import axios from 'axios'
+import { toast } from 'react-hot-toast';
 
 const BlogStats = ({ stats }) => {
     // Ensure the keys exist and fallback to 0 if not
@@ -43,11 +44,15 @@ export const ManagePublishedBlogCard = ({ blog }) => {
                         <p className="line-clamp-1">Published on {getDay(publishedAt)}</p>
                     </div>
                     <div className="flex gap-6 mt-3">
-                        <Link to={`/editor/${blog.blog_id || blog._id}`} className="pr-4 py-2 underline">Edit</Link>
+                        <Link to={`/admin/editor/${blog.blog_id || blog._id}`} className="pr-4 py-2 underline">Edit</Link>
                         <button className="pr-4 py-2 underline" onClick={() => setShowStat(prevVal => !prevVal)}>
                             Stats
                         </button>
-                        <button className="pr-4 py-2 underline text-red-500 hover:text-red-700 font-medium" style={{color: '#ef4444'}} onClick={(e) => deleteBlog(blog, access_token, e.target)}>Delete</button>
+                        <button className="pr-4 py-2 underline text-red-500 hover:text-red-700 font-medium" style={{color: '#ef4444'}} onClick={(e) => {
+                            if (window.confirm('Are you sure you want to delete this blog? This action cannot be undone.')) {
+                                deleteBlog(blog, access_token, e.target);
+                            }
+                        }}>Delete</button>
                     </div>
                 </div>
             </div>
@@ -75,8 +80,12 @@ export const ManageDraftBlogPost = ({ blog }) => {
                 <p className="line-clamp-2 font-gelasio">{des.length ? des : "No Description"}</p>
 
                 <div className="flex gap-6 mt-3">
-                    <Link to={`/editor/${blog.blog_id || blog.id || blog_id}`} className="pr-4 py-2 underline">Edit</Link>
-                    <button className="pr-4 py-2 underline text-red-500 hover:text-red-700 font-medium" style={{color: '#ef4444'}} onClick={(e) => deleteBlog(blog, access_token, e.target)}>Delete</button>
+                    <Link to={`/admin/editor/${blog.blog_id || blog.id || blog_id}`} className="pr-4 py-2 underline">Edit</Link>
+                    <button className="pr-4 py-2 underline text-red-500 hover:text-red-700 font-medium" style={{color: '#ef4444'}} onClick={(e) => {
+                        if (window.confirm('Are you sure you want to delete this blog? This action cannot be undone.')) {
+                            deleteBlog(blog, access_token, e.target);
+                        }
+                    }}>Delete</button>
                 </div>
             </div>
         </div>
@@ -98,26 +107,18 @@ const deleteBlog = (blog, access_token, target) => {
         .then(({ data }) => {
             target.removeAttribute("disabled");
             setStateFunc(prevVal => {
-                if (!prevVal || !Array.isArray(prevVal.results)) {
-                    return prevVal; // Prevents crash if state is not as expected
-                }
-                let { deletedDocCount, totalDocs, results } = prevVal;
-                results.splice(index, 1);
-
-                if(!deletedDocCount){
-                    deletedDocCount = 0;
-                }
-
-                if (!results.length && totalDocs - 1 >= 0) {
-                    return null;
-                }
-                return { ...prevVal, totalDocs: totalDocs - 1, deletedDocCount: deletedDocCount + 1 };
-            })
+                if (!Array.isArray(prevVal)) return prevVal;
+                // Remove the blog at the given index
+                const newArr = prevVal.slice();
+                newArr.splice(index, 1);
+                return newArr;
+            });
+            toast.success("Blog deleted successfully!");
         })
         .catch(err => {
             target.removeAttribute("disabled");
             // User-facing error message
-            alert("Failed to delete blog. Please try again.");
+            toast.error("Failed to delete blog. Please try again.");
             console.log(err);
         })
 } 

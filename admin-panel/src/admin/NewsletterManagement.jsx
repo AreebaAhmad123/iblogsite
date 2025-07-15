@@ -154,30 +154,27 @@ const NewsletterManagement = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-8 text-gray-800">Newsletter Management</h1>
-      
+    <div className="w-full max-w-full md:max-w-6xl mx-auto p-2 xs:p-3 sm:p-4 md:p-6">
+      <h1 className="text-xl sm:text-3xl font-bold mb-4 sm:mb-8 text-gray-800">Newsletter Management</h1>
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h3 className="text-lg font-semibold text-gray-700">Total Subscribers</h3>
-          <p className="text-3xl font-bold text-blue-600">{stats.total || 0}</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6 mb-4 sm:mb-8">
+        <div className="bg-white p-3 sm:p-6 rounded-lg shadow-md">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-700">Total Subscribers</h3>
+          <p className="text-2xl sm:text-3xl font-bold text-blue-600">{stats.total || 0}</p>
         </div>
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h3 className="text-lg font-semibold text-gray-700">Active Subscribers</h3>
-          <p className="text-3xl font-bold text-green-600">{stats.active || 0}</p>
+        <div className="bg-white p-3 sm:p-6 rounded-lg shadow-md">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-700">Active Subscribers</h3>
+          <p className="text-2xl sm:text-3xl font-bold text-green-600">{stats.active || 0}</p>
         </div>
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h3 className="text-lg font-semibold text-gray-700">Inactive Subscribers</h3>
-          <p className="text-3xl font-bold text-red-600">{stats.inactive || 0}</p>
+        <div className="bg-white p-3 sm:p-6 rounded-lg shadow-md">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-700">Inactive Subscribers</h3>
+          <p className="text-2xl sm:text-3xl font-bold text-red-600">{stats.inactive || 0}</p>
         </div>
       </div>
-
       {/* Send Newsletter Form */}
-      <div className="bg-white p-6 rounded-lg shadow-md mb-8">
-        <h2 className="text-2xl font-bold mb-6 text-gray-800">Send Newsletter</h2>
-        
-        <form onSubmit={handleSendNewsletter} className="space-y-4">
+      <div className="bg-white p-3 sm:p-6 rounded-lg shadow-md mb-4 sm:mb-8">
+        <h2 className="text-lg sm:text-2xl font-bold mb-3 sm:mb-6 text-gray-800">Send Newsletter</h2>
+        <form onSubmit={handleSendNewsletter} className="space-y-3 sm:space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Subject
@@ -186,12 +183,11 @@ const NewsletterManagement = () => {
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-black dark:bg-black dark:text-white dark:border-gray-700"
               placeholder="Enter newsletter subject..."
               required
             />
           </div>
-          
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Content (HTML supported)
@@ -199,13 +195,12 @@ const NewsletterManagement = () => {
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-black dark:bg-black dark:text-white dark:border-gray-700"
               rows="8"
               placeholder="Enter newsletter content (HTML supported)..."
               required
             />
           </div>
-          
           <div className="flex gap-4">
             <button
               type="submit"
@@ -232,10 +227,10 @@ const NewsletterManagement = () => {
       </div>
 
       {/* Test Newsletter Form */}
-      <div className="bg-white p-6 rounded-lg shadow-md mb-8">
-        <h2 className="text-2xl font-bold mb-6 text-gray-800">Send Test Newsletter</h2>
+      <div className="bg-white p-3 sm:p-6 rounded-lg shadow-md mb-4 sm:mb-8">
+        <h2 className="text-lg sm:text-2xl font-bold mb-3 sm:mb-6 text-gray-800">Send Test Newsletter</h2>
         
-        <form onSubmit={handleSendTestNewsletter} className="space-y-4">
+        <form onSubmit={handleSendTestNewsletter} className="space-y-3 sm:space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Test Email
@@ -244,7 +239,7 @@ const NewsletterManagement = () => {
               type="email"
               value={testEmail}
               onChange={(e) => setTestEmail(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-black dark:bg-black dark:text-white dark:border-gray-700"
               placeholder="Enter test email address..."
               required
             />
@@ -267,8 +262,8 @@ const NewsletterManagement = () => {
       </div>
 
       {/* Subscribers List */}
-      <div className="bg-white p-6 rounded-lg shadow-md">
-        <h2 className="text-2xl font-bold mb-6 text-gray-800">Subscribers</h2>
+      <div className="bg-white p-3 sm:p-6 rounded-lg shadow-md">
+        <h2 className="text-lg sm:text-2xl font-bold mb-3 sm:mb-6 text-gray-800">Subscribers</h2>
         
         {loadingSubscribers ? (
           <Loader />

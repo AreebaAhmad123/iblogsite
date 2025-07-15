@@ -3,7 +3,7 @@ import mongoose, { Schema } from "mongoose";
 const notificationSchema = mongoose.Schema({
     type: {
         type: String,
-        enum: ["like", "comment", "reply", "new_user", "newsletter"],
+        enum: ["like", "comment", "reply", "new_user", "newsletter", "admin_status_change_request"],
         required: true
     },
     blog: {
@@ -53,6 +53,22 @@ const notificationSchema = mongoose.Schema({
     },
     for_role: {
         type: String
+    },
+    // --- ADDED FOR ADMIN STATUS CHANGE REQUEST NOTIFICATIONS ---
+    targetUser: {
+        type: Schema.Types.ObjectId,
+        ref: 'users',
+        required: false
+    },
+    action: {
+        type: String,
+        enum: ['promote', 'demote'],
+        required: false
+    },
+    statusChangeRequest: {
+        type: Schema.Types.ObjectId,
+        ref: 'AdminStatusChangeRequest',
+        required: false
     }
 },
 {

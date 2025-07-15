@@ -18,9 +18,18 @@ console.log("EditorJS import check:", {
   isConstructor: EditorJS && EditorJS.prototype && EditorJS.prototype.constructor === EditorJS
 });
 
-function scheduleAutoSave() {
-  // TODO: Implement auto-save logic here
-  console.log('Auto-save scheduled');
+// Helper function to validate blog_id
+const isValidBlogId = id => /^[a-z0-9-]{3,100}$/.test(id);
+
+function scheduleAutoSave(autoSaveTimeoutRef, debouncedAutoSave) {
+  // Clear any existing timeout
+  if (autoSaveTimeoutRef.current) {
+    clearTimeout(autoSaveTimeoutRef.current);
+  }
+  // Schedule auto-save after 30 seconds of inactivity
+  autoSaveTimeoutRef.current = setTimeout(() => {
+    debouncedAutoSave();
+  }, 30000); // 30 seconds
 }
 
 const BlogEditor = () => {
@@ -90,6 +99,7 @@ const BlogEditor = () => {
       sessionStorage.setItem("blog_draft", JSON.stringify(blogData));
     } catch (error) {
       console.warn("Failed to save to sessionStorage:", error);
+      toast.error("Draft backup failed: browser storage is full or unavailable.");
     }
   };
 
@@ -123,12 +133,10 @@ const BlogEditor = () => {
 
   // Debounced auto-save function
   const debouncedAutoSave = useCallback(async () => {
-    if (!authChecked || !blog?.blog_id || isSaving || isAutoSaving) return;
-    
+    if (!authChecked || isSaving || isAutoSaving) return;
     setAutoSaveStatus('saving');
     setSaveError(null);
     setIsAutoSaving(true);
-    
     try {
       let content = null;
       if (editorRef.current?.isReady) {
@@ -138,28 +146,28 @@ const BlogEditor = () => {
           console.warn("Auto-save: Editor save failed:", editorError);
           setAutoSaveStatus('error');
           setSaveError("Editor not ready");
+          setIsAutoSaving(false);
           return;
         }
       } else {
         setAutoSaveStatus('error');
         setSaveError("Editor not ready");
+        setIsAutoSaving(false);
         return;
       }
-
       // Validate content before sending
       if (!content || !content.blocks) {
         console.warn("Auto-save: Invalid content structure");
         setAutoSaveStatus('error');
         setSaveError("Invalid content structure");
+        setIsAutoSaving(false);
         return;
       }
-
       // Get current values from state (not closure)
       const currentTitle = title;
       const currentBanner = banner;
       const currentDes = des;
       const currentTags = tags;
-
       // Only auto-save if there's actual content
       const hasContent = currentTitle.trim() || currentDes.trim() || (content.blocks && content.blocks.length > 0);
       if (!hasContent) {
@@ -167,19 +175,22 @@ const BlogEditor = () => {
         setIsAutoSaving(false);
         return;
       }
-
       const blogObj = {
         title: currentTitle.trim() || "Untitled Draft",
         banner: currentBanner.trim() || "",
         des: currentDes.trim() || "",
         content: normalizeContent(content),
         tags: currentTags.map(tag => tag.trim().toLowerCase()).filter(tag => tag.length > 0),
-        draft: true,
-        id: getBlogId()
+        draft: true
       };
-
-      const response = await axios.post(
-        `${import.meta.env.VITE_SERVER_DOMAIN}/api/create-blog`,
+      // If we have a blog_id, update; otherwise, create
+      const isUpdate = !!getBlogId();
+      const url = isUpdate
+        ? `${import.meta.env.VITE_SERVER_DOMAIN}/api/update-blog/${getBlogId()}`
+        : `${import.meta.env.VITE_SERVER_DOMAIN}/api/create-blog`;
+      const method = isUpdate ? 'put' : 'post';
+      const response = await axios[method](
+        url,
         blogObj,
         {
           headers: {
@@ -189,19 +200,23 @@ const BlogEditor = () => {
           timeout: 10000
         }
       );
-      
+      // If this was a new blog, update context with new blog_id
+      if (!isUpdate && response.data.blog_id) {
+        setBlog(prev => ({
+          ...prev,
+          blog_id: response.data.blog_id,
+          content: blogObj.content
+        }));
+      }
       setLastSaved(new Date());
       setAutoSaveStatus('saved');
       setSaveError(null);
       setIsAutoSaving(false);
-      console.log("Auto-save completed successfully");
-      
       // Reset status after 3 seconds
       setTimeout(() => setAutoSaveStatus('idle'), 3000);
     } catch (error) {
       console.warn("Auto-save failed:", error);
       setAutoSaveStatus('error');
-      
       let errorMessage = "Auto-save failed";
       if (error.response?.status === 401) {
         errorMessage = "Authentication expired";
@@ -212,7 +227,6 @@ const BlogEditor = () => {
       } else if (error.response?.data?.error) {
         errorMessage = error.response.data.error;
       }
-      
       setSaveError(errorMessage);
       // Reset error status after 5 seconds
       setTimeout(() => {
@@ -221,7 +235,7 @@ const BlogEditor = () => {
         setIsAutoSaving(false);
       }, 5000);
     }
-  }, [authChecked, blog?.blog_id, access_token, isSaving, isAutoSaving]);
+  }, [authChecked, blog?.blog_id, access_token, isSaving, isAutoSaving, title, banner, des, tags, setBlog]);
 
   // Replace the EditorJS initialization useEffect with a new one that re-initializes on blog.content change
 
@@ -232,14 +246,23 @@ const BlogEditor = () => {
 
     // Clean up any existing editor instance
     if (editorRef.current) {
-      if (editorRef.current.isReady && typeof editorRef.current.isReady.then === 'function') {
-        editorRef.current.isReady.then(() => editorRef.current.destroy()).catch(() => {});
-      } else if (typeof editorRef.current.destroy === 'function') {
-        editorRef.current.destroy();
+      try {
+        if (editorRef.current.isReady && typeof editorRef.current.isReady.then === 'function') {
+          editorRef.current.isReady.then(() => editorRef.current.destroy()).catch(() => {});
+        } else if (typeof editorRef.current.destroy === 'function') {
+          editorRef.current.destroy();
+        }
+      } catch (cleanupErr) {
+        console.warn('Error during EditorJS destroy:', cleanupErr);
+      } finally {
+        editorRef.current = null;
+        setEditorReady(false);
+        setContentLoaded(false);
       }
-      editorRef.current = null;
-      setEditorReady(false);
-      setContentLoaded(false);
+    }
+    // Always clear the editor holder DOM node before creating a new EditorJS instance
+    if (textEditorRef.current) {
+      textEditorRef.current.innerHTML = '';
     }
 
     const editorData = blog.content[0] || {
@@ -275,6 +298,7 @@ const BlogEditor = () => {
                 des
               };
               saveToSessionDraft(blogData);
+              scheduleAutoSave(autoSaveTimeoutRef, debouncedAutoSave);
             }
           } catch (error) {
             console.warn("Failed to save to sessionStorage:", error);
@@ -295,14 +319,19 @@ const BlogEditor = () => {
 
     return () => {
       if (editorRef.current) {
-        if (editorRef.current.isReady && typeof editorRef.current.isReady.then === 'function') {
-          editorRef.current.isReady.then(() => editorRef.current.destroy()).catch(() => {});
-        } else if (typeof editorRef.current.destroy === 'function') {
-          editorRef.current.destroy();
+        try {
+          if (editorRef.current.isReady && typeof editorRef.current.isReady.then === 'function') {
+            editorRef.current.isReady.then(() => editorRef.current.destroy()).catch(() => {});
+          } else if (typeof editorRef.current.destroy === 'function') {
+            editorRef.current.destroy();
+          }
+        } catch (cleanupErr) {
+          console.warn('Error during EditorJS destroy (unmount):', cleanupErr);
+        } finally {
+          editorRef.current = null;
+          setEditorReady(false);
+          setContentLoaded(false);
         }
-        editorRef.current = null;
-        setEditorReady(false);
-        setContentLoaded(false);
       }
     };
   }, [authChecked, blog?.content, textEditorRef.current]);
@@ -389,7 +418,7 @@ const BlogEditor = () => {
         // Update blog context but preserve other local state
         setBlog(prev => ({ ...prev, banner: secureUrl }));
         toast.success("Banner uploaded successfully! 🎉");
-        scheduleAutoSave();
+        scheduleAutoSave(autoSaveTimeoutRef, debouncedAutoSave);
       } else {
         toast.error("Failed to upload banner image");
       }
@@ -420,21 +449,22 @@ const BlogEditor = () => {
     }
   };
 
+  // Add auto-save scheduling to all user input handlers
   const handleTitleChange = (e) => {
-    console.log("Title changed:", e.target.value);
     setTitle(e.target.value);
     setHasUserEdited(true);
+    scheduleAutoSave(autoSaveTimeoutRef, debouncedAutoSave);
   };
 
   const handleDescriptionChange = (e) => {
-    console.log("Description changed:", e.target.value);
     setDes(e.target.value);
     setHasUserEdited(true);
+    scheduleAutoSave(autoSaveTimeoutRef, debouncedAutoSave);
   };
 
   const handleTagInputChange = (e) => {
     setTagInput(e.target.value);
-    setHasUserEdited(true);
+    scheduleAutoSave(autoSaveTimeoutRef, debouncedAutoSave);
   };
 
   const normalizeTag = tag => tag.trim().toLowerCase();
@@ -448,9 +478,10 @@ const BlogEditor = () => {
       }
       const newTag = normalizeTag(tagInput);
       if (!tags.map(normalizeTag).includes(newTag)) {
-        setTags([...tags, newTag]);
+        const newTags = [...tags, newTag];
+        setTags(newTags);
         setTagInput("");
-        scheduleAutoSave();
+        scheduleAutoSave(autoSaveTimeoutRef, debouncedAutoSave);
       } else {
         toast.error("Duplicate tag");
       }
@@ -461,7 +492,7 @@ const BlogEditor = () => {
     const normalizedTag = normalizeTag(tag);
     const newTags = tags.filter((t) => normalizeTag(t) !== normalizedTag);
     setTags(newTags);
-    scheduleAutoSave();
+    scheduleAutoSave(autoSaveTimeoutRef, debouncedAutoSave);
   };
 
   const handleTitleKeyDown = (e) => {
@@ -477,11 +508,25 @@ const BlogEditor = () => {
   const handleSaveDraft = async (e) => {
     if (isSaving) return;
     
+    // Validate blog_id if present
+    const blogIdToCheck = getBlogId();
+    if (blogIdToCheck && !isValidBlogId(blogIdToCheck)) {
+      toast.error("Draft has an invalid blog ID. Please start a new draft.");
+      clearSessionDraft();
+      navigate("/admin/editor");
+      return;
+    }
+
     // Validate minimum content requirements
     const hasTitle = title.trim().length > 0;
     const hasDescription = des.trim().length > 0;
-    const hasContent = editorRef.current?.isReady && await editorRef.current.save().then(data => data.blocks && data.blocks.length > 0).catch(() => false);
-    
+    let hasContent = false;
+    if (editorRef.current?.isReady) {
+      hasContent = await editorRef.current.save().then(data => data.blocks && data.blocks.length > 0).catch(() => false);
+    }
+    if (!editorRef.current?.isReady && !hasTitle && !hasDescription) {
+      return toast.error("Editor is not ready. Please wait for the editor to load before saving.");
+    }
     if (!hasTitle && !hasDescription && !hasContent) {
       return toast.error("Please add some content (title, description, or blog content) before saving as draft");
     }
@@ -504,15 +549,20 @@ const BlogEditor = () => {
           content = { time: Date.now(), blocks: [], version: '2.27.2' };
         }
       } else {
-        // If editor not ready, create empty content structure
-        content = { time: Date.now(), blocks: [], version: '2.27.2' };
+        // If editor not ready, do not save empty content
+        toast.error("Editor is not ready. Please wait for the editor to load before saving.");
+        setIsSaving(false);
+        return;
       }
+
+      // Ensure content is a single block, not an array of blocks
+      const contentBlock = Array.isArray(content) ? (content[0] || { time: Date.now(), blocks: [], version: '2.27.2' }) : content;
 
       const blogObj = {
         title: title.trim() || "Untitled Draft",
         banner: banner.trim() || "",
         des: des.trim() || "",
-        content: [content],
+        content: [contentBlock],
         tags: tags.map(tag => tag.trim().toLowerCase()).filter(tag => tag.length > 0),
         draft: true
       };
@@ -591,6 +641,15 @@ const BlogEditor = () => {
     console.log("Current blog state:", blog);
     console.log("Editor ref ready:", editorRef.current?.isReady);
     
+    // Validate blog_id if present
+    const blogIdToCheck = getBlogId();
+    if (blogIdToCheck && !isValidBlogId(blogIdToCheck)) {
+      toast.error("Draft has an invalid blog ID. Please start a new draft.");
+      clearSessionDraft();
+      navigate("/admin/editor");
+      return;
+    }
+
     // Validate all required fields for publishing
     if (!banner) {
       console.log("Validation failed: No banner");
@@ -676,6 +735,15 @@ const BlogEditor = () => {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isSaving]);
 
+  // Cancel auto-save on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Place this after all hooks and before the return statement
   if (!authChecked || !blog) {
     return <div style={{textAlign: 'center', marginTop: '3rem'}}>Loading editor...</div>;
@@ -697,7 +765,7 @@ const BlogEditor = () => {
               {isSaving ? "Saving..." : "Save Draft"}
             </button>
             <button
-              className="btn-light py-2 w-full sm:w-auto text-sm sm:text-base"
+              className="btn-dark py-2 w-full sm:w-auto text-sm sm:text-base"
               onClick={handlePublishEvent}
               disabled={!title.trim() || !des.trim() || isSaving || isAutoSaving}
               title={!title.trim() || !des.trim() ? "Complete all required fields to publish" : isSaving || isAutoSaving ? "Please wait for save to complete" : "Publish blog"}

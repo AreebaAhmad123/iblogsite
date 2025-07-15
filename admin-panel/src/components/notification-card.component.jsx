@@ -144,6 +144,18 @@ const NotificationCard = ({ data, index, notificationState }) => {
                             <p className="text-blue-800">📧 Newsletter subscription confirmed</p>
                         </div>
                     )}
+
+                    {type === 'admin_status_change_request' && (
+                        <div className="p-4 mt-4 rounded-md bg-yellow-50 border border-yellow-200">
+                            <p className="text-yellow-800">
+                                <b>{fullname}</b> requested to <b>{data.action}</b> 
+                                <b>{data.targetUser?.personal_info?.fullname || data.targetUser?.fullname || ' a user'}</b>
+                                {data.action === 'promote' ? ' to admin' : data.action === 'demote' ? ' to user' : ''}.
+                                <br/>
+                                <span className="text-xs text-gray-600">Request submitted: {getDay(createdAt)}</span>
+                            </p>
+                        </div>
+                    )}
                 </div>
             </div>
 

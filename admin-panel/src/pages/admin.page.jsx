@@ -237,7 +237,7 @@ const AdminPanel = () => {
   };
 
   return (
-    <section className="relative flex flex-col md:flex-row gap-0 py-0 m-0 min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
+    <section className="relative flex flex-col md:flex-row gap-0 py-0 m-0 min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300 overflow-x-hidden">
       {/* Spacer for navbar height */}
       <div className="h-10 w-full md:hidden" />
       {/* Mobile Header - Simple responsive header, now below navbar */}
@@ -263,17 +263,17 @@ const AdminPanel = () => {
       </div>
       {/* Sidebar Navigation */}
       {/* Desktop Sidebar (always visible) */}
-      <div className="hidden md:flex flex-col w-[260px] min-w-[220px] max-w-[320px] h-[calc(100vh-0px)] sticky top-0 overflow-y-auto bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 z-30 shadow-sm dark:shadow-lg transition-colors duration-300">
-        <div className="flex items-center justify-between px-8 pt-8 mb-3">
+      <div className="hidden md:flex flex-col w-full md:w-[260px] min-w-0 md:min-w-[220px] max-w-full md:max-w-[320px] h-auto md:h-[calc(100vh-0px)] sticky top-0 overflow-y-auto bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 z-30 shadow-sm dark:shadow-lg transition-colors duration-300">
+        <div className="flex items-center justify-between px-4 md:px-8 pt-4 md:pt-8 mb-3">
           <h1 className="text-xl text-dark-grey dark:text-gray-200 font-gelasio">Admin Panel</h1>
           <ThemeToggle />
         </div>
-        <hr className="border-grey dark:border-gray-700 -ml-6 mb-8 mr-6" />
-        <nav className="flex-1 flex flex-col gap-2 py-8 px-4">
+        <hr className="border-grey dark:border-gray-700 -ml-2 md:-ml-6 mb-4 md:mb-8 mr-2 md:mr-6" />
+        <nav className="flex-1 flex flex-col gap-2 py-4 md:py-8 px-2 md:px-4">
           {sections.map((section) => (
             <button
               key={section.key}
-              className={`flex items-center w-full px-5 py-3 my-1 rounded-xl font-medium text-lg transition-all duration-150 group relative
+              className={`flex items-center w-full px-3 md:px-5 py-2 md:py-3 my-1 rounded-xl font-medium text-base md:text-lg transition-all duration-150 group relative
                 ${activeSection === section.key
                   ? 'bg-gray-200 dark:bg-gray-700 text-black dark:text-white font-bold shadow-md dark:shadow-lg border-l-4 border-black dark:border-purple'
                   : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-black dark:hover:text-white'}
@@ -290,10 +290,10 @@ const AdminPanel = () => {
             </button>
           ))}
         </nav>
-        <div className="px-4 py-2">
+        <div className="px-2 md:px-4 py-2">
           <LogoutButton />
         </div>
-        <div className="mt-auto py-6 px-8 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-400 dark:text-gray-500">&copy; {new Date().getFullYear()} IslamicStories Admin</div>
+        <div className="mt-auto py-4 md:py-6 px-4 md:px-8 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-400 dark:text-gray-500">&copy; {new Date().getFullYear()} IslamicStories Admin</div>
       </div>
       {/* Mobile Sidebar (animated) */}
       <AnimatePresence>
@@ -304,7 +304,7 @@ const AdminPanel = () => {
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: 'tween', duration: 0.3 }}
-              className="fixed top-0 left-0 h-full w-72 max-w-full bg-white dark:bg-gray-800 shadow-lg dark:shadow-2xl z-40 overflow-y-auto p-0 flex flex-col md:hidden transition-colors duration-300"
+              className="fixed top-0 left-0 h-full w-11/12 max-w-xs bg-white dark:bg-gray-800 shadow-lg dark:shadow-2xl z-40 overflow-y-auto p-0 flex flex-col md:hidden transition-colors duration-300"
               style={{ borderTopLeftRadius: '0.75rem', borderBottomLeftRadius: '0.75rem' }}
             >
               <button
@@ -316,16 +316,16 @@ const AdminPanel = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
-              <div className="flex items-center justify-between px-8 pt-8 mb-3">
+              <div className="flex items-center justify-between px-4 pt-8 mb-3">
                 <h1 className="text-xl text-dark-grey dark:text-gray-200 font-gelasio">Admin Panel</h1>
                 <ThemeToggle />
               </div>
-              <hr className="border-grey dark:border-gray-700 -ml-6 mb-8 mr-6" />
-              <nav className="flex-1 flex flex-col gap-2 py-8 px-4">
+              <hr className="border-grey dark:border-gray-700 -ml-2 mb-4 mr-2" />
+              <nav className="flex-1 flex flex-col gap-2 py-4 px-2">
                 {sections.map((section) => (
                   <button
                     key={section.key}
-                    className={`flex items-center w-full px-5 py-3 my-1 rounded-xl font-medium text-lg transition-all duration-150 group relative
+                    className={`flex items-center w-full px-3 py-2 my-1 rounded-xl font-medium text-base transition-all duration-150 group relative
                       ${activeSection === section.key
                         ? 'bg-gray-200 dark:bg-gray-700 text-black dark:text-white font-bold shadow-md dark:shadow-lg border-l-4 border-black dark:border-purple'
                         : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-black dark:hover:text-white'}
@@ -342,10 +342,10 @@ const AdminPanel = () => {
                   </button>
                 ))}
               </nav>
-              <div className="px-4 py-2">
+              <div className="px-2 py-2">
                 <LogoutButton />
               </div>
-              <div className="mt-auto py-6 px-8 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-400 dark:text-gray-500">&copy; {new Date().getFullYear()} IslamicStories Admin</div>
+              <div className="mt-auto py-4 px-4 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-400 dark:text-gray-500">&copy; {new Date().getFullYear()} IslamicStories Admin</div>
             </motion.div>
             {/* Overlay for mobile sidebar */}
             <motion.div
@@ -361,7 +361,7 @@ const AdminPanel = () => {
         )}
       </AnimatePresence>
       {/* Main Content */}
-      <main className="flex-1 p-2 pt-4 md:pt-8 md:p-8 transition-all duration-300 w-full min-h-screen mt-4 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-tl-3xl md:rounded-tl-none shadow-inner dark:shadow-none">
+      <main className="flex-1 w-full px-1 xs:px-2 sm:px-3 md:px-8 pt-4 md:pt-8 transition-all duration-300 min-h-screen mt-4 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-tl-3xl md:rounded-tl-none shadow-inner dark:shadow-none overflow-x-auto">
         <Outlet />
       </main>
     </section>

@@ -2,7 +2,7 @@ import { useContext, useEffect, useState, createContext } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import BlogEditor from "../components/blog-editor.component.jsx";
 import PublishForm from "../components/publish-form.component.jsx";
-import Loader from "../components/loader.component.jsx";
+import Loader, { EditorErrorBoundary } from "../components/loader.component.jsx";
 import { UserContext } from "../App";
 
 const blogStructure = {
@@ -56,16 +56,22 @@ const Editor = () => {
                         let formattedContent;
                         if (!data.blog.content) {
                             formattedContent = [{ time: Date.now(), blocks: [], version: '2.27.2' }];
-                        } else if (!Array.isArray(data.blog.content)) {
-                            formattedContent = [{ time: Date.now(), blocks: data.blog.content.blocks || [], version: '2.27.2' }];
-                        } else if (data.blog.content.length === 0) {
-                            formattedContent = [{ time: Date.now(), blocks: [], version: '2.27.2' }];
+                        } else if (Array.isArray(data.blog.content) && data.blog.content.length > 0) {
+                            // Always use only the first content block
+                            const first = data.blog.content[0];
+                            formattedContent = [{
+                                time: first.time || Date.now(),
+                                blocks: Array.isArray(first.blocks) ? first.blocks : [],
+                                version: first.version || '2.27.2'
+                            }];
+                        } else if (typeof data.blog.content === 'object' && data.blog.content !== null) {
+                            formattedContent = [{
+                                time: data.blog.content.time || Date.now(),
+                                blocks: Array.isArray(data.blog.content.blocks) ? data.blog.content.blocks : [],
+                                version: data.blog.content.version || '2.27.2'
+                            }];
                         } else {
-                            formattedContent = data.blog.content.map(content => ({
-                                time: content.time || Date.now(),
-                                blocks: Array.isArray(content.blocks) ? content.blocks : [],
-                                version: content.version || '2.27.2'
-                            }));
+                            formattedContent = [{ time: Date.now(), blocks: [], version: '2.27.2' }];
                         }
                         setBlog({ ...data.blog, content: formattedContent });
                         setError(null);
@@ -125,7 +131,11 @@ const Editor = () => {
     return (
         <EditorContext.Provider value={{ blog, setBlog, editorState, setEditorState, textEditor, setTextEditor }}>
             <div className="editor-page">
-                {editorState === "editor" && blog && userAuth && <BlogEditor />}
+                {editorState === "editor" && blog && userAuth && (
+                  <EditorErrorBoundary>
+                    <BlogEditor />
+                  </EditorErrorBoundary>
+                )}
                 {editorState === "publish" && blog && userAuth && <PublishForm />}
             </div>
         </EditorContext.Provider>

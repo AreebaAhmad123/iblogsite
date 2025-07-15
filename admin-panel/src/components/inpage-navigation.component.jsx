@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from "react";
 export let activeTabLineRef;
 export let activeTabRef
 
-const InPageNavigation = ({ routes = [], defaultHidden = [], defaultActiveIndex = 0, children }) => {
+const InPageNavigation = ({ routes = [], defaultHidden = [], defaultActiveIndex = 0, children, onTabChange }) => {
     activeTabLineRef = useRef();
     activeTabRef = useRef();
 
@@ -17,6 +17,9 @@ const InPageNavigation = ({ routes = [], defaultHidden = [], defaultActiveIndex 
             activeTabLineRef.current.style.left = offsetLeft + "px";
         }
         setInPageNavIndex(i);
+        if (typeof onTabChange === 'function') {
+            onTabChange(i);
+        }
     };
 
     useEffect(() => {

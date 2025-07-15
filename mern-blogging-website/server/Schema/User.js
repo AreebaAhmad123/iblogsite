@@ -61,6 +61,14 @@ const userSchema = mongoose.Schema({
         type: Boolean,
         default: false
     },
+    active: {
+        type: Boolean,
+        default: true
+    },
+    deleted: {
+        type: Boolean,
+        default: false
+    },
     verificationToken: {
         type: String,
         // Used for email verification, cleared after verification

@@ -6,10 +6,12 @@ const statusStyles = {
   Deleted: "bg-red-100 text-red-700",
 };
 
-export default function AdminUserStatusBadge({ status }) {
-  return (
-    <span className={`px-3 py-1 rounded-full text-xs ${statusStyles[status] || "bg-gray-100 text-gray-600"}`}>
-      {status}
-    </span>
-  );
+export default function AdminUserStatusBadge({ user }) {
+  if (user.deleted) {
+    return <span className="inline-block px-3 py-1 text-xs rounded-full bg-gray-200 text-gray-700 border border-gray-300">Deleted</span>;
+  }
+  if (user.active === false) {
+    return <span className="inline-block px-3 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200">Deactivated</span>;
+  }
+  return <span className="inline-block px-3 py-1 text-xs rounded-full bg-green-100 text-green-800 border border-green-200">Active</span>;
 } 
