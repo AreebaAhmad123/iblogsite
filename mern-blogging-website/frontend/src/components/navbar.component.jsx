@@ -218,11 +218,6 @@ const Navbar = () => {
               </button>
             {isLoggedIn ? (
               <>
-                {userAuth?.admin && (
-                  <Link className="border-2 border-grey rounded-full px-5 py-0 hidden md:block" to="/admin">
-                    <i className="fi fi-rr-lock text-sm pt-2 -ml-2"></i> Admin Panel
-                  </Link>
-                )}
                 <Link to="/dashboard/notification" className="hidden md:block">
                   <button 
                     className="w-12 h-12 rounded-full bg-grey relative hover:bg-black/10 dark-hover"
@@ -406,11 +401,6 @@ const Navbar = () => {
                 </Link>
                 {isLoggedIn ? (
                   <>
-                    {userAuth?.admin && (
-                      <Link to="/admin" className="text-gray-600 navHover" onClick={() => setIsMenuOpen(false)}>
-                        <i className="fi fi-rr-lock text-sm pt-2 -ml-2"></i> Admin Panel
-                      </Link>
-                    )}
                   </>
                 ) : (
                   <>

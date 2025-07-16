@@ -33,7 +33,6 @@ export const profileDataStructure = {
 
 
 const ProfilePage = () => {
-    console.log("Rendering ProfilePage");
     let { username: profileId } = useParams();
 
     let [profile, setProfile] = useState(profileDataStructure);
@@ -44,26 +43,12 @@ const ProfilePage = () => {
     const [bookmarkedBlogs, setBookmarkedBlogs] = useState(null);
     const [loadingBookmarks, setLoadingBookmarks] = useState(false);
 
-    console.log("Profile username from URL:", profileId);
-
     let { personal_info: { fullname, username: profile_username, profile_img, bio }, account_info: { total_posts, total_reads }, social_links, joinedAt } = profile;
     const { userAuth, setUserAuth } = useContext(UserContext);
     const username = userAuth?.username || "";
     const isOwnProfile = userAuth?.username && profile_username && userAuth.username === profile_username;
     
-    console.log("Profile debug:", {
-        profileId,
-        userAuthUsername: userAuth?.username,
-        profileUsername: profile_username,
-        isOwnProfile,
-        bookmarked_blogs: userAuth?.bookmarked_blogs,
-        bookmarkedBlogsState: bookmarkedBlogs,
-        profile: profile,
-        userAuth: userAuth
-    });
-    
     if (!userAuth) {
-        console.log("User not authenticated or userAuth not loaded yet.");
         return <Loader />;
     }
 
@@ -86,15 +71,12 @@ const ProfilePage = () => {
     };
 
     const fetchUserProfile = () => {
-        console.log("Fetching profile for username:", profileId);
         axios.post(import.meta.env.VITE_SERVER_DOMAIN + "/api/get-profile", {
             username: profileId
         })
             .then(({ data: user }) => {
-                console.log("Profile API response:", user);
                 if (user) {
                     setProfile(user);
-                    console.log("Fetched profile:", user);
                     setProfileLoaded(profileId);
                     setError(null);
                     // Fetch blogs for all users
@@ -106,13 +88,11 @@ const ProfilePage = () => {
                         });
                     }
                 } else {
-                    console.log("No user data received from API");
                     setError("User not found");
                 }
                 setLoading(false);
             })
             .catch(err => {
-                console.error("Profile fetch error:", err);
                 if (err.response?.status === 404) {
                     setError("User not found");
                 } else {
@@ -144,7 +124,7 @@ const ProfilePage = () => {
                 setBlogs(formattedData);
             }
         } catch (err) {
-            console.error("Error fetching blogs:", err);
+            // console.error("Error fetching blogs:", err);
         }
     };
 
@@ -155,15 +135,8 @@ const ProfilePage = () => {
 
     // Function to get bookmarked blogs with pagination
     const getBookmarkedBlogs = async ({ page = 1 }) => {
-        console.log("getBookmarkedBlogs called:", {
-            page,
-            bookmarked_blogs: userAuth?.bookmarked_blogs,
-            length: userAuth?.bookmarked_blogs?.length,
-            userAuth: userAuth
-        });
         
         if (!userAuth?.bookmarked_blogs?.length) {
-            console.log("No bookmarked blogs found, setting empty state");
             setBookmarkedBlogs({
                 results: [],
                 page: 1,
@@ -173,11 +146,6 @@ const ProfilePage = () => {
         }
 
         try {
-            console.log("Making API call to get-blogs-by-ids with:", {
-                blog_ids: userAuth.bookmarked_blogs,
-                page,
-                limit: 5
-            });
             
             const { data: { blogs: newBookmarkedBlogs, totalDocs } } = await axios.post(
                 import.meta.env.VITE_SERVER_DOMAIN + "/api/get-blogs-by-ids",
@@ -188,11 +156,6 @@ const ProfilePage = () => {
                 }
             );
             
-            console.log("Setting bookmarkedBlogs:", newBookmarkedBlogs);
-            console.log("Rendering bookmarkedBlogs.results:", newBookmarkedBlogs);
-            newBookmarkedBlogs.forEach((blog, i) => {
-                console.log(`Blog #${i}:`, blog);
-            });
             // Custom pagination logic for bookmarked blogs
             if (bookmarkedBlogs !== null && page !== 1) {
                 // Append to existing results
@@ -211,7 +174,7 @@ const ProfilePage = () => {
                 });
             }
         } catch (err) {
-            console.error("Error fetching bookmarked blogs:", err);
+            // console.error("Error fetching bookmarked blogs:", err);
             setBookmarkedBlogs({
                 results: [],
                 page: 1,
@@ -237,15 +200,8 @@ const ProfilePage = () => {
     }, [profileId, blogs]);
 
     useEffect(() => {
-        console.log("useEffect for bookmarks triggered:", {
-            bookmarkedBlogs,
-            userAuth: !!userAuth,
-            profileId,
-            isOwnProfile
-        });
         
         if (bookmarkedBlogs === null && userAuth && isOwnProfile) {
-            console.log("Fetching bookmarked blogs...");
             setLoadingBookmarks(true);
             getBookmarkedBlogs({ page: 1 }).finally(() => {
                 setLoadingBookmarks(false);
@@ -287,36 +243,9 @@ const ProfilePage = () => {
                                 <div className="w-full">
                                     {isOwnProfile ? (
                                         <InPageNavigation
-                                            routes={["Published Blogs", "Bookmarked Blogs"]}
+                                            routes={["Bookmarked Blogs"]}
                                             defaultActiveIndex={0}
                                         >
-                                            {/* Published Blogs Tab */}
-                                            <div label="Published Blogs">
-                                                {blogs == null ? (
-                                                    <Loader />
-                                                ) : blogs.results.length ? (
-                                                    <>
-                                                        {blogs.results.map((blog, i) => (
-                                                            <AnimationWrapper key={i} transition={{ duration: 1, delay: i * 0.1 }}>
-                                                                <BlogPostCard
-                                                                    content={blog}
-                                                                    author={blog.author.personal_info}
-                                                                    liked={userAuth?.liked_blogs?.includes(blog.blog_id)}
-                                                                    onLikeToggle={handleLikeToggle}
-                                                                />
-                                                            </AnimationWrapper>
-                                                        ))}
-                                                        {/* Load More Button */}
-                                                        <LoadMoreDataBtn
-                                                            state={blogs}
-                                                            fetchDataFun={loadMoreBlogs}
-                                                            additionalParam={blogs.user_id}
-                                                        />
-                                                    </>
-                                                ) : (
-                                                    <NoDataMessage message="No Blogs Published" />
-                                                )}
-                                            </div>
                                             {/* Bookmarked Blogs Tab */}
                                             <div label="Bookmarked Blogs">
                                                 {(!bookmarkedBlogs || !Array.isArray(bookmarkedBlogs.results)) ? (
@@ -348,35 +277,12 @@ const ProfilePage = () => {
                                     ) : (
                                         // User viewing someone else's profile
                                         <InPageNavigation
-                                            routes={["Published Blogs", "About"]}
+                                            routes={["About"]}
                                             defaultActiveIndex={0}
                                         >
-                                            {/* Published Blogs Tab */}
-                                            <div label="Published Blogs">
-                                                {blogs == null ? (
-                                                    <Loader />
-                                                ) : blogs.results.length ? (
-                                                    <>
-                                                        {blogs.results.map((blog, i) => (
-                                                            <AnimationWrapper key={i} transition={{ duration: 1, delay: i * 0.1 }}>
-                                                                <BlogPostCard 
-                                                                    content={blog} 
-                                                                    author={blog.author.personal_info} 
-                                                                    liked={userAuth?.liked_blogs?.includes(blog.blog_id)}
-                                                                    onLikeToggle={handleLikeToggle}
-                                                                />
-                                                            </AnimationWrapper>
-                                                        ))}
-                                                        {/* Load More Button */}
-                                                        <LoadMoreDataBtn
-                                                            state={blogs}
-                                                            fetchDataFun={loadMoreBlogs}
-                                                            additionalParam={blogs.user_id}
-                                                        />
-                                                    </>
-                                                ) : (
-                                                    <NoDataMessage message="No Blogs Published" />
-                                                )}
+                                            {/* About Tab */}
+                                            <div label="About">
+                                                {/* ...about content... */}
                                             </div>
                                         </InPageNavigation>
                                     )}

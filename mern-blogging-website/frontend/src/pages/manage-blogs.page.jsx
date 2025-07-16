@@ -34,7 +34,6 @@ export const ManageBlogs = () => {
         setError(prev => ({ ...prev, [type]: null }));
         
         try {
-            console.log(`Fetching ${draft ? 'drafts' : 'published blogs'}...`);
             
             const response = await axios.post(
                 import.meta.env.VITE_SERVER_DOMAIN + "/api/user-written-blogs",
@@ -49,8 +48,7 @@ export const ManageBlogs = () => {
                 }
             );
 
-            console.log(`${draft ? 'Drafts' : 'Published blogs'} response:`, response.data);
-
+            
             let formattedData = await filterPaginationData({
                 state: draft ? drafts : blogs,
                 data: response.data.blogs,
@@ -60,8 +58,7 @@ export const ManageBlogs = () => {
                 data_to_send: { draft, query }
             });
 
-            console.log(`Formatted ${draft ? 'drafts' : 'blogs'} data:`, formattedData);
-
+            
             // Append results if loading more pages
             if (page > 1) {
                 if (draft) {
@@ -83,7 +80,6 @@ export const ManageBlogs = () => {
                 }
             }
         } catch (err) {
-            console.error(`Error fetching ${draft ? 'drafts' : 'published blogs'}:`, err);
             
             let errorMessage = "Failed to load blogs";
             if (err.response?.status === 401) {
@@ -111,16 +107,13 @@ export const ManageBlogs = () => {
 
     // Load blogs and drafts on mount and when access_token changes
     useEffect(() => {
-        console.log("ManageBlogs useEffect triggered");
-        console.log("access_token:", userAuth && userAuth.access_token ? userAuth.access_token.substring(0, 20) + "..." : "null");
-        console.log("userAuth:", userAuth);
         
         if (userAuth && userAuth.access_token) {
-            console.log("Loading blogs and drafts with token:", userAuth.access_token.substring(0, 20) + "...");
+            
             getBlogs({ page: 1, draft: false });
             getBlogs({ page: 1, draft: true });
         } else {
-            console.log("No access token available, skipping blog loading");
+            
         }
     }, [userAuth]); // Removed blogs, drafts, query from dependencies to prevent infinite loops
 
@@ -166,17 +159,17 @@ export const ManageBlogs = () => {
 
     const debugDrafts = async () => {
         try {
-            console.log("Testing debug endpoint...");
+            
             const response = await axios.get(
                 import.meta.env.VITE_SERVER_DOMAIN + "/api/debug/drafts",
                 {
                     timeout: 10000
                 }
             );
-            console.log("Debug response:", response.data);
+            
             alert(`Debug Info:\nTotal Blogs: ${response.data.stats.totalBlogs}\nDrafts: ${response.data.stats.drafts}\nPublished: ${response.data.stats.published}`);
         } catch (err) {
-            console.error("Debug error:", err);
+            
             alert(`Debug Error: ${err.response?.data?.error || err.message}`);
         }
     };
@@ -219,7 +212,7 @@ export const ManageBlogs = () => {
                         ) : Array.isArray(blogs.results) && blogs.results.length ? (
                             <>
                                 {blogs.results.map((blog, i) => {
-                                    console.log('Published blog:', blog);
+                                    
                                     return (
                                         <AnimationWrapper key={i} transition={{ delay: i * 0.04 }}>
                                             <ManagePublishedBlogCard blog={{ ...blog, index: i, setStateFunc: setBlogs }} index={i} />

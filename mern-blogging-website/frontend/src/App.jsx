@@ -28,7 +28,6 @@ import VerifyNewsletterPage from "./pages/verify-newsletter.page.jsx";
 import axios from "./common/axios-config";
 import ScrollToTop from "./components/scroll-to-top.component.jsx";
 import PageLoader from "./components/page-loader.component.jsx";
-import AdminPanel from "./pages/admin.page.jsx";
 
 export const UserContext = createContext({});
 export const ThemeContext = createContext({});
@@ -201,7 +200,6 @@ const App = () => {
               <Route path="pages" element={<PagesPage />} />
               <Route path="verify-user" element={<VerifyUserPage />} />
               <Route path="verify-newsletter" element={<VerifyNewsletterPage />} />
-              <Route path="admin" element={<AdminPanel />} />
               <Route path="*" element={<PageNotFound />} />
             </Route>
           </Routes>

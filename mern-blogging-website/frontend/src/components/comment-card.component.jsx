@@ -23,8 +23,7 @@ const CommentCard = ({ commentData, index, leftVal }) => {
     // Allow comment author or admins to delete comments
     const canDelete = userAuth && commented_by && (
         commented_by._id === userAuth._id || 
-        commented_by.toString() === userAuth._id ||
-        userAuth.admin === true
+        commented_by.toString() === userAuth._id
     );
 
     // Debug log for troubleshooting

@@ -1,7 +1,10 @@
-import { useState, useContext, useEffect } from 'react';
+import { useState, useContext, useEffect, useMemo } from 'react';
 import { UserContext } from '../App';
 import axios from 'axios';
 import Loader from '../components/loader.component';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
+import { saveAs } from "file-saver";
 
 const NewsletterManagement = () => {
   const { userAuth } = useContext(UserContext);
@@ -21,9 +24,72 @@ const NewsletterManagement = () => {
   const [sendingTest, setSendingTest] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
+  // Pagination and selection state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [selected, setSelected] = useState([]);
+  const [search, setSearch] = useState("");
+  // Filtered subscribers for search
+  const filteredSubscribers = useMemo(() => {
+    if (!search.trim()) return subscribers;
+    return subscribers.filter(s => s.email.toLowerCase().includes(search.trim().toLowerCase()));
+  }, [subscribers, search]);
+  // Memoized paginated subscribers (use filtered list)
+  const paginatedSubscribers = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredSubscribers.slice(start, start + pageSize);
+  }, [filteredSubscribers, currentPage, pageSize]);
+  const totalPages = Math.ceil(filteredSubscribers.length / pageSize) || 1;
+
+  // Selection handlers
+  const isAllSelected = paginatedSubscribers.length > 0 && paginatedSubscribers.every(s => selected.includes(s._id));
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelected(prev => Array.from(new Set([...prev, ...paginatedSubscribers.map(s => s._id)])));
+    } else {
+      setSelected(prev => prev.filter(id => !paginatedSubscribers.some(s => s._id === id)));
+    }
+  };
+  const handleSelectOne = (id) => {
+    setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+  // Bulk actions
+  const handleBulkAction = async (action) => {
+    setBulkActionError("");
+    if (selected.length === 0) return;
+    if (!window.confirm(`Are you sure you want to ${action} the selected subscribers?`)) return;
+    try {
+      let result;
+      if (action === 'delete') {
+        const res = await axios.post(
+          `${import.meta.env.VITE_SERVER_DOMAIN}/api/admin/newsletter-subscribers/bulk-delete`,
+          { ids: selected },
+          { headers: { 'Authorization': `Bearer ${userAuth.access_token}` } }
+        );
+        result = res.data;
+      } else if (action === 'activate' || action === 'deactivate') {
+        const res = await axios.post(
+          `${import.meta.env.VITE_SERVER_DOMAIN}/api/admin/newsletter-subscribers/bulk-update`,
+          { ids: selected, isActive: action === 'activate' ? true : false },
+          { headers: { 'Authorization': `Bearer ${userAuth.access_token}` } }
+        );
+        result = res.data;
+      }
+      setBulkActionError("");
+      if (result.failed && result.failed.length > 0) {
+        setBulkActionError(`Some actions failed: ${result.failed.map(f => `${f.id || f} (${f.reason || 'unknown'})`).join(', ')}`);
+      }
+      setSelected([]);
+      fetchSubscribers();
+    } catch (err) {
+      setBulkActionError('Bulk action failed. Please try again.');
+    }
+  };
+
   // Fetch subscribers
   const fetchSubscribers = async () => {
     setLoadingSubscribers(true);
+    setFetchSubscribersError("");
     try {
       const res = await axios.get(
         `${import.meta.env.VITE_SERVER_DOMAIN}/api/admin/newsletter-subscribers`,
@@ -32,7 +98,7 @@ const NewsletterManagement = () => {
       setSubscribers(res.data.subscribers);
       setStats(res.data.stats);
     } catch (err) {
-      console.error('Error fetching subscribers:', err);
+      setFetchSubscribersError('Error fetching subscribers. Please try again.');
     } finally {
       setLoadingSubscribers(false);
     }
@@ -44,14 +110,34 @@ const NewsletterManagement = () => {
     }
   }, [userAuth.access_token]);
 
+  // Add validation error state
+  const [newsletterValidationError, setNewsletterValidationError] = useState("");
+  const [testNewsletterValidationError, setTestNewsletterValidationError] = useState("");
+
+  // Helper to strip HTML tags
+  const stripHtml = (html) => html.replace(/<[^>]*>?/gm, '').trim();
+
   // Send newsletter to all subscribers
   const handleSendNewsletter = async (e) => {
     e.preventDefault();
-    if (!subject.trim() || !content.trim()) {
-      alert('Please fill in both subject and content.');
+    if (sendingNewsletter) return; // Prevent double submission
+    setNewsletterValidationError("");
+    if (!subject.trim() || stripHtml(content).length === 0) {
+      setNewsletterValidationError('Please fill in both subject and content.');
       return;
     }
-
+    if (subject.trim().length < 5) {
+      setNewsletterValidationError('Subject must be at least 5 characters.');
+      return;
+    }
+    if (stripHtml(content).length < 20) {
+      setNewsletterValidationError('Content must be at least 20 characters (excluding formatting).');
+      return;
+    }
+    // Confirmation dialog
+    if (!window.confirm('Are you sure you want to send this newsletter to ALL active subscribers? This action cannot be undone.')) {
+      return;
+    }
     setSendingNewsletter(true);
     setSendResult(null);
     
@@ -87,8 +173,17 @@ const NewsletterManagement = () => {
   // Send test newsletter
   const handleSendTestNewsletter = async (e) => {
     e.preventDefault();
-    if (!testEmail.trim() || !subject.trim() || !content.trim()) {
-      alert('Please fill in all fields for test newsletter.');
+    setTestNewsletterValidationError("");
+    if (!testEmail.trim() || !subject.trim() || stripHtml(content).length === 0) {
+      setTestNewsletterValidationError('Please fill in all fields for test newsletter.');
+      return;
+    }
+    if (subject.trim().length < 5) {
+      setTestNewsletterValidationError('Subject must be at least 5 characters.');
+      return;
+    }
+    if (stripHtml(content).length < 20) {
+      setTestNewsletterValidationError('Content must be at least 20 characters (excluding formatting).');
       return;
     }
 
@@ -117,40 +212,50 @@ const NewsletterManagement = () => {
   };
 
   // Update subscriber status
-  const handleToggleSubscriberStatus = async (subscriberId, currentStatus) => {
+  const handleToggleSubscriberStatus = async (subscriberId, currentStatus, silent = false) => {
+    if (!silent) setSubscriberStatusError("");
     try {
       await axios.patch(
         `${import.meta.env.VITE_SERVER_DOMAIN}/api/admin/newsletter-subscriber/${subscriberId}`,
         { isActive: !currentStatus },
         { headers: { 'Authorization': `Bearer ${userAuth.access_token}` } }
       );
-      
-      // Refresh subscribers
       fetchSubscribers();
     } catch (err) {
-      console.error('Error updating subscriber status:', err);
-      alert('Failed to update subscriber status.');
+      if (!silent) setSubscriberStatusError('Failed to update subscriber status.');
     }
   };
 
   // Delete subscriber
-  const handleDeleteSubscriber = async (subscriberId) => {
-    if (!confirm('Are you sure you want to delete this subscriber?')) {
+  const handleDeleteSubscriber = async (subscriberId, silent = false) => {
+    if (!silent && !confirm('Are you sure you want to delete this subscriber?')) {
       return;
     }
-
+    if (!silent) setDeleteSubscriberError("");
     try {
       await axios.delete(
         `${import.meta.env.VITE_SERVER_DOMAIN}/api/admin/newsletter-subscriber/${subscriberId}`,
         { headers: { 'Authorization': `Bearer ${userAuth.access_token}` } }
       );
-      
-      // Refresh subscribers
       fetchSubscribers();
     } catch (err) {
-      console.error('Error deleting subscriber:', err);
-      alert('Failed to delete subscriber.');
+      if (!silent) setDeleteSubscriberError('Failed to delete subscriber.');
     }
+  };
+
+  // Export to CSV
+  const handleExportCSV = () => {
+    const csvRows = [
+      ["Email", "Status", "Subscribed At"],
+      ...filteredSubscribers.map(s => [
+        s.email,
+        s.isActive ? "Active" : "Inactive",
+        new Date(s.subscribedAt).toLocaleString()
+      ])
+    ];
+    const csvContent = csvRows.map(row => row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    saveAs(blob, `newsletter-subscribers-${new Date().toISOString().slice(0,10)}.csv`);
   };
 
   return (
@@ -192,13 +297,13 @@ const NewsletterManagement = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Content (HTML supported)
             </label>
-            <textarea
+            <ReactQuill
               value={content}
-              onChange={(e) => setContent(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-black dark:bg-black dark:text-white dark:border-gray-700"
-              rows="8"
-              placeholder="Enter newsletter content (HTML supported)..."
-              required
+              onChange={setContent}
+              className="bg-white text-black dark:bg-black dark:text-white dark:border-gray-700"
+              theme="snow"
+              placeholder="Enter newsletter content..."
+              style={{ minHeight: '200px', marginBottom: '1rem' }}
             />
           </div>
           <div className="flex gap-4">
@@ -209,6 +314,15 @@ const NewsletterManagement = () => {
             >
               {sendingNewsletter ? 'Sending...' : 'Send to All Subscribers'}
             </button>
+            {sendingNewsletter && (
+              <span className="ml-2 flex items-center text-blue-600">
+                <svg className="animate-spin h-5 w-5 mr-1 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+                </svg>
+                Sending newsletter...
+              </span>
+            )}
           </div>
         </form>
 
@@ -220,6 +334,21 @@ const NewsletterManagement = () => {
                 <p>Total subscribers: {sendResult.stats.totalSubscribers}</p>
                 <p>Successfully sent: {sendResult.stats.successCount}</p>
                 <p>Failed: {sendResult.stats.failureCount}</p>
+                {Array.isArray(sendResult.stats.errors) && sendResult.stats.errors.length > 0 && (
+                  <div className="mt-2">
+                    <p className="font-semibold text-red-700">Failed Emails:</p>
+                    <ul className="list-disc ml-6">
+                      {sendResult.stats.errors.slice(0, 10).map((err, idx) => (
+                        <li key={idx} className="text-xs text-red-700">
+                          {err.email}: {err.error}
+                        </li>
+                      ))}
+                    </ul>
+                    {sendResult.stats.errors.length > 10 && (
+                      <p className="text-xs text-gray-600">...and {sendResult.stats.errors.length - 10} more</p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -264,7 +393,38 @@ const NewsletterManagement = () => {
       {/* Subscribers List */}
       <div className="bg-white p-3 sm:p-6 rounded-lg shadow-md">
         <h2 className="text-lg sm:text-2xl font-bold mb-3 sm:mb-6 text-gray-800">Subscribers</h2>
-        
+        {/* Search and Export Controls */}
+        <div className="mb-4 flex flex-wrap gap-2 items-center">
+          <input
+            type="text"
+            placeholder="Search by email..."
+            value={search}
+            onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
+            className="px-2 py-1 border rounded w-64"
+          />
+          <button
+            onClick={handleExportCSV}
+            className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+          >
+            Export CSV
+          </button>
+        </div>
+        {/* Bulk actions */}
+        <div className="mb-2 flex flex-wrap gap-2 items-center">
+          <button onClick={() => handleBulkAction('activate')} disabled={selected.length === 0} className="bg-green-600 text-white px-3 py-1 rounded disabled:opacity-50">Activate</button>
+          <button onClick={() => handleBulkAction('deactivate')} disabled={selected.length === 0} className="bg-yellow-600 text-white px-3 py-1 rounded disabled:opacity-50">Deactivate</button>
+          <button onClick={() => handleBulkAction('delete')} disabled={selected.length === 0} className="bg-red-600 text-white px-3 py-1 rounded disabled:opacity-50">Delete</button>
+          <span className="ml-4 text-sm text-gray-500">{selected.length} selected</span>
+        </div>
+        {/* Pagination controls */}
+        <div className="mb-2 flex flex-wrap gap-2 items-center">
+          <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-2 py-1 border rounded disabled:opacity-50">Prev</button>
+          <span>Page {currentPage} of {totalPages}</span>
+          <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-2 py-1 border rounded disabled:opacity-50">Next</button>
+          <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }} className="ml-2 px-2 py-1 border rounded">
+            {[10, 20, 50, 100].map(size => <option key={size} value={size}>{size} / page</option>)}
+          </select>
+        </div>
         {loadingSubscribers ? (
           <Loader />
         ) : (
@@ -272,6 +432,7 @@ const NewsletterManagement = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="px-2 py-3"><input type="checkbox" checked={isAllSelected} onChange={handleSelectAll} /></th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Email
                   </th>
@@ -287,8 +448,9 @@ const NewsletterManagement = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {subscribers.map((subscriber) => (
-                  <tr key={subscriber._id}>
+                {paginatedSubscribers.map((subscriber) => (
+                  <tr key={subscriber._id} className={selected.includes(subscriber._id) ? 'bg-blue-50' : ''}>
+                    <td className="px-2 py-4"><input type="checkbox" checked={selected.includes(subscriber._id)} onChange={() => handleSelectOne(subscriber._id)} /></td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {subscriber.email}
                     </td>
@@ -325,6 +487,18 @@ const NewsletterManagement = () => {
           </div>
         )}
       </div>
+      {/* Bulk actions error */}
+      {bulkActionError && <div className="mb-2 text-red-600">{bulkActionError}</div>}
+      {/* Fetch subscribers error */}
+      {fetchSubscribersError && <div className="mb-2 text-red-600">{fetchSubscribersError}</div>}
+      {/* Subscriber status error */}
+      {subscriberStatusError && <div className="mb-2 text-red-600">{subscriberStatusError}</div>}
+      {/* Delete subscriber error */}
+      {deleteSubscriberError && <div className="mb-2 text-red-600">{deleteSubscriberError}</div>}
+      {/* Newsletter validation error */}
+      {newsletterValidationError && <div className="mb-2 text-red-600">{newsletterValidationError}</div>}
+      {/* Test newsletter validation error */}
+      {testNewsletterValidationError && <div className="mb-2 text-red-600">{testNewsletterValidationError}</div>}
     </div>
   );
 };

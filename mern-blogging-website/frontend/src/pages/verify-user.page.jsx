@@ -20,12 +20,10 @@ const VerifyUserPage = () => {
     }
     axios.get(`${import.meta.env.VITE_SERVER_DOMAIN}/api/verify-user?token=${token}`)
       .then(async ({ data }) => {
-        console.log('Verification response:', data);
         if (data.user) {
           setStatus("Email verified! You are now logged in. Redirecting to home page...");
           // Store user info for auto-login
           setUserAuth(data.user);
-          console.log("setUserAuth called with:", data.user);
           toast.success("Email verified! You are now logged in.");
           setTimeout(() => {
             navigate("/");

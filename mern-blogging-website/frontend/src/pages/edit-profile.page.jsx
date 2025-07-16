@@ -8,6 +8,7 @@ import InputBox from "../components/input.component";
 import AnimationWrapper from "../common/page-animation";
 import { storeInSession } from "../common/session";
 import { uploadImage } from "../common/cloudinary";
+import csrfManager from "../common/csrf";
 
 
 const EditProfile = () => {
@@ -87,13 +88,13 @@ const EditProfile = () => {
         setIsUploading(true);
         let loadingToast = toast.loading("Uploading...");
 
-        uploadImage(updatedProfileImg)
+        uploadImage(updatedProfileImg, access_token)
             .then(url => {
                 if (url) {
                     axios.post(import.meta.env.VITE_SERVER_DOMAIN + "/api/update-profile-img", { url })
                         .then(({ data }) => {
                             let newUserAuth = { ...userAuth, profile_img: data.profile_img };
-                            updateUserAuth(newUserAuth, setUserAuth);
+                            setUserAuth(newUserAuth);
                             setUpdatedProfileImg(null);
                             setRefreshTrigger(prev => prev + 1);
                             toast.dismiss(loadingToast);
@@ -146,24 +147,36 @@ const EditProfile = () => {
         setIsSubmitting(true);
         let loadingToast = toast.loading("Updating ...");
 
-        axios.post(import.meta.env.VITE_SERVER_DOMAIN + "/api/update-profile", {
-            firstname,
-            lastname,
-            fullname,
-            email,
-            username,
-            bio,
-            social_links: { youtube, facebook, twitter, github, instagram, website }
-        })
+        const csrfToken = csrfManager.getCSRFToken();
+        axios.post(
+            import.meta.env.VITE_SERVER_DOMAIN + "/api/update-profile",
+            {
+                firstname,
+                lastname,
+                fullname,
+                email,
+                username,
+                bio,
+                social_links: { youtube, facebook, twitter, github, instagram, website }
+            },
+            {
+                headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {}
+            }
+        )
             .then(({ data }) => {
-                if (userAuth.username !== data.username) {
-                    let newUserAuth = { ...userAuth, username: data.username, email: data.email };
-                    updateUserAuth(newUserAuth, setUserAuth);
-                    setCurrentUsername(data.username);
-                } else if (userAuth.email !== data.email) {
-                    let newUserAuth = { ...userAuth, email: data.email };
-                    updateUserAuth(newUserAuth, setUserAuth);
-                }
+                // Update all relevant fields in userAuth
+                let newUserAuth = {
+                    ...userAuth,
+                    username: data.username,
+                    email: data.email,
+                    fullname: data.fullname,
+                    firstname: data.firstname,
+                    lastname: data.lastname,
+                    bio: profile.personal_info.bio,
+                    social_links: profile.social_links
+                };
+                setUserAuth(newUserAuth);
+                setCurrentUsername(data.username);
                 setRefreshTrigger(prev => prev + 1);
                 toast.dismiss(loadingToast);
                 toast.success("Profile Updated");

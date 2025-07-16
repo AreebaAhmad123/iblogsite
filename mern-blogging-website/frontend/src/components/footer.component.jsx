@@ -9,6 +9,7 @@ import axios from 'axios';
 import { ThemeContext } from '../App';
 import { motion } from 'framer-motion';
 import { fadeInUp, staggerContainer, staggerItem, imageHover } from '../common/animations';
+import ReCAPTCHA from "react-google-recaptcha";
 
 const defaultInstagramImages = [
   blogBanner,
@@ -52,28 +53,48 @@ const Footer = ({ instagramImages, recentComments, categories }) => {
   const [newsletterMsg, setNewsletterMsg] = useState("");
   const [newsletterStatus, setNewsletterStatus] = useState("");
   const [loading, setLoading] = useState(false);
+  const [recaptchaToken, setRecaptchaToken] = useState("");
+  const [showCaptcha, setShowCaptcha] = useState(false);
+  const [pendingSubmit, setPendingSubmit] = useState(false);
 
   const handleNewsletterSubmit = async (e) => {
     e.preventDefault();
     setNewsletterMsg("");
     setNewsletterStatus("");
+    // Instead of submitting, show the captcha modal
+    setShowCaptcha(true);
+    setPendingSubmit(true);
+  };
+
+  const handleCaptchaVerify = async (token) => {
+    setRecaptchaToken(token);
+    setShowCaptcha(false);
+    setPendingSubmit(false);
     setLoading(true);
     try {
       const res = await axios.post(
         import.meta.env.VITE_SERVER_DOMAIN + "/api/subscribe-newsletter",
-        { email }
+        { email, recaptchaToken: token }
       );
       setNewsletterMsg(res.data.message || "Subscribed successfully!");
       setNewsletterStatus("success");
       setEmail("");
+      setRecaptchaToken("");
     } catch (err) {
-      setNewsletterMsg(
-        err.response?.data?.error || "Failed to subscribe. Please try again."
-      );
+      let errorMsg = err.response?.data?.error || "Failed to subscribe. Please try again.";
+      if (errorMsg === "Email already subscribed.") {
+        errorMsg = "This email is already subscribed to the newsletter.";
+      }
+      setNewsletterMsg(errorMsg);
       setNewsletterStatus("error");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCaptchaClose = () => {
+    setShowCaptcha(false);
+    setPendingSubmit(false);
   };
 
   // For Instagram section, use blog objects with banner and blog_id if available
@@ -105,28 +126,51 @@ const Footer = ({ instagramImages, recentComments, categories }) => {
               Lorem Ipsum Dolor Sit Amet, Consectetur Adipisicing Elit, Sed Do Eiusmod Tempor Incididunt Ut Labore Et Dolore Magna Aliqua. Egestas Purus Viverra Accumsan In Nisi Nisi. 
             </p>
             <h3 className="font-semibold text-base sm:text-lg mb-1 flex items-center gap-1 mt-6"><span className="text-yellow-400 text-lg">•</span> Newsletters</h3>
-            <form onSubmit={handleNewsletterSubmit} className="flex items-center border rounded-md overflow-hidden w-full max-w-xs bg-white">
-              <input
-                type="email"
-                placeholder="Write Your Email .."
-                className="flex-1 px-2 py-2 bg-transparent outline-none text-xs sm:text-sm"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-                disabled={loading}
-              />
-              <button
-                type="submit"
-                className="bg-white px-2 py-2 text-gray-500 hover:text-black dark:hover:text-white disabled:opacity-60"
-                disabled={loading}
+            <div className="flex flex-col items-center w-full max-w-sm">
+              <form
+                onSubmit={handleNewsletterSubmit}
+                className="flex flex-col gap-4 border rounded-lg w-full bg-white p-4 shadow"
               >
-                {loading ? (
-                  <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
-                ) : (
-                  <i className="fi fi-rr-envelope"></i>
-                )}
-              </button>
-            </form>
+                <input
+                  type="email"
+                  placeholder="Write Your Email .."
+                  className="w-full px-3 py-2 bg-transparent outline-none text-sm border border-gray-300 rounded mb-2"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                  disabled={loading}
+                />
+                <button
+                  type="submit"
+                  className="w-full bg-black text-white px-3 py-2 rounded hover:bg-black disabled:opacity-60"
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <svg className="animate-spin w-5 h-5 mx-auto" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+                  ) : (
+                    <i className="fi fi-rr-envelope"></i>
+                  )}
+                </button>
+              </form>
+              {/* CAPTCHA Modal */}
+              {showCaptcha && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90">
+                  <div className="flex flex-col items-center">
+                    <button
+                      onClick={handleCaptchaClose}
+                      className="text-white text-2xl absolute top-4 right-8"
+                      aria-label="Close"
+                    >
+                      &times;
+                    </button>
+                    <ReCAPTCHA
+                      sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
+                      onChange={handleCaptchaVerify}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
             {newsletterMsg && (
               <div className={`mt-2 text-xs ${newsletterStatus === 'success' ? 'text-green-600' : 'text-red-500'}`}>{newsletterMsg}</div>
             )}
@@ -178,7 +222,7 @@ const Footer = ({ instagramImages, recentComments, categories }) => {
                     : instagramBlogs.slice(0, 12)
                 ).map((blog, idx) => (
                   <motion.div
-                    key={blog.blog_id ? blog.blog_id : `default-${idx}`}
+                    key={blog.blog_id ? `ig-${blog.blog_id}` : `default-ig-${idx}`}
                     variants={staggerItem}
                     initial="initial"
                     whileInView="animate"

@@ -19,6 +19,13 @@ const newsletterSchema = new mongoose.Schema({
   },
   verificationToken: {
     type: String
+  },
+  unsubscribeToken: {
+    type: String
+  },
+  bounceCount: {
+    type: Number,
+    default: 0
   }
 });
 

@@ -81,7 +81,6 @@ export const sendVerificationEmail = async (email, verificationToken) => {
     };
 
     await transporter.sendMail(mailOptions);
-    console.log(`Verification email sent successfully to ${email}`);
     return { success: true };
   } catch (error) {
     console.error('Error sending verification email:', error);
@@ -117,7 +116,6 @@ export const sendNewsletterVerificationEmail = async (email, verificationToken) 
     };
 
     await transporter.sendMail(mailOptions);
-    console.log(`Newsletter verification email sent successfully to ${email}`);
     return { success: true };
   } catch (error) {
     console.error('Error sending newsletter verification email:', error);
@@ -151,7 +149,6 @@ export const sendContactNotification = async (contactData) => {
     };
 
     await transporter.sendMail(mailOptions);
-    console.log('Contact notification email sent successfully');
     return { success: true };
   } catch (error) {
     console.error('Error sending contact notification:', error);
@@ -175,41 +172,76 @@ export const sendNewsletterToSubscribers = async (subject, content, newsletterId
       return { success: false, error: 'No active subscribers found' };
     }
 
+    const BATCH_SIZE = 50;
+    const DELAY_BETWEEN_BATCHES_MS = 2000;
     let successCount = 0;
     let failureCount = 0;
     const errors = [];
 
-    // Send emails to all subscribers
-    for (const subscriber of subscribers) {
-      try {
-        const mailOptions = {
-          from: process.env.EMAIL_USER,
-          to: subscriber.email,
-          subject: subject,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #2c5530;">Islamic Stories Newsletter</h2>
-              <div style="background-color: #f9f9f9; padding: 20px; border-radius: 5px;">
-                ${content}
-              </div>
-              <hr style="margin: 20px 0;">
-              <p style="font-size: 12px; color: #666;">
-                You're receiving this email because you subscribed to our newsletter.
-                <br>
-                <a href="${process.env.FRONTEND_URL}/unsubscribe?email=${subscriber.email}" 
-                   style="color: #2c5530;">Unsubscribe</a>
-              </p>
-            </div>
-          `
-        };
+    // Helper to delay between batches
+    const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-        await transporter.sendMail(mailOptions);
-        successCount++;
-        console.log(`Newsletter sent successfully to ${subscriber.email}`);
-      } catch (error) {
-        failureCount++;
-        errors.push({ email: subscriber.email, error: error.message });
-        console.error(`Failed to send newsletter to ${subscriber.email}:`, error);
+    for (let i = 0; i < subscribers.length; i += BATCH_SIZE) {
+      const batch = subscribers.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(batch.map(async (subscriber) => {
+        let attempts = 0;
+        let sent = false;
+        let lastError = null;
+        while (attempts < 3 && !sent) {
+          try {
+            const mailOptions = {
+              from: process.env.EMAIL_USER,
+              to: subscriber.email,
+              subject: subject,
+              html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                  <h2 style="color: #2c5530;">Islamic Stories Newsletter</h2>
+                  <div style="background-color: #f9f9f9; padding: 20px; border-radius: 5px;">
+                    ${content}
+                  </div>
+                  <hr style="margin: 20px 0;">
+                  <p style="font-size: 12px; color: #666;">
+                    You're receiving this email because you subscribed to our newsletter.
+                    <br>
+                    <a href="${process.env.FRONTEND_URL}/unsubscribe?token=${subscriber.unsubscribeToken}" 
+                       style="color: #2c5530;">Unsubscribe</a>
+                  </p>
+                </div>
+              `
+            };
+            await transporter.sendMail(mailOptions);
+            sent = true;
+            successCount++;
+            return null;
+          } catch (error) {
+            attempts++;
+            lastError = error;
+            if (attempts >= 3) {
+              failureCount++;
+              errors.push({ email: subscriber.email, error: error.message });
+              console.error(`Failed to send newsletter to ${subscriber.email} after 3 attempts:`, error);
+              // Increment bounceCount and auto-deactivate if needed
+              try {
+                const updated = await Newsletter.findByIdAndUpdate(
+                  subscriber._id,
+                  { $inc: { bounceCount: 1 } },
+                  { new: true }
+                );
+                if (updated && updated.bounceCount >= 3) {
+                  await Newsletter.findByIdAndUpdate(subscriber._id, { isActive: false });
+                  console.warn(`Auto-deactivated subscriber ${subscriber.email} due to repeated bounces.`);
+                }
+              } catch (dbErr) {
+                console.error('Error updating bounceCount or deactivating:', dbErr);
+              }
+              return { email: subscriber.email, error: error.message };
+            }
+          }
+        }
+      }));
+      // Wait between batches if not the last batch
+      if (i + BATCH_SIZE < subscribers.length) {
+        await delay(DELAY_BETWEEN_BATCHES_MS);
       }
     }
 
@@ -234,6 +266,11 @@ export const sendNewsletterToSubscriber = async (email, subject, content) => {
       return { success: false, error: 'Email configuration missing' };
     }
 
+    // Find the subscriber to get their unsubscribeToken
+    const Newsletter = (await import('../Schema/Newsletter.js')).default;
+    const subscriber = await Newsletter.findOne({ email });
+    const unsubscribeToken = subscriber?.unsubscribeToken || '';
+
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: email,
@@ -248,7 +285,7 @@ export const sendNewsletterToSubscriber = async (email, subject, content) => {
           <p style="font-size: 12px; color: #666;">
             You're receiving this email because you subscribed to our newsletter.
             <br>
-            <a href="${process.env.FRONTEND_URL}/unsubscribe?email=${email}" 
+            <a href="${process.env.FRONTEND_URL}/unsubscribe?token=${unsubscribeToken}" 
                style="color: #2c5530;">Unsubscribe</a>
           </p>
         </div>
@@ -256,7 +293,6 @@ export const sendNewsletterToSubscriber = async (email, subject, content) => {
     };
 
     await transporter.sendMail(mailOptions);
-    console.log(`Newsletter sent successfully to ${email}`);
     return { success: true };
   } catch (error) {
     console.error('Error sending newsletter:', error);

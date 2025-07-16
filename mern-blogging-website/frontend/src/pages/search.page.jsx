@@ -29,7 +29,7 @@ const SearchPage = () => {
                 setBlogs(formattedData);
             })
             .catch((err) => {
-                console.log(err);
+                // console.log(err);
             });
     };
 

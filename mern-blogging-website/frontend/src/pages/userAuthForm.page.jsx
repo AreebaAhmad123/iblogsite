@@ -26,14 +26,7 @@ const UserAuthForm = ({ type }) => {
   // Post-login redirect logic
   useEffect(() => {
     if (userAuth && userAuth.username) {
-      if (next === '/admin') {
-        if (userAuth.admin) {
-          navigate('/admin', { replace: true });
-        } else {
-          toast.error('You do not have admin access.');
-          navigate('/', { replace: true });
-        }
-      } else if (next) {
+      if (next) {
         navigate(next, { replace: true });
       } else {
         navigate('/', { replace: true });
@@ -49,7 +42,6 @@ const UserAuthForm = ({ type }) => {
 
   const userAuththroughServer = async (serverRoute, formData) => {
     try {
-      console.log("[LOGIN] Sending request to:", import.meta.env.VITE_SERVER_DOMAIN + "/api" + serverRoute, formData);
       
       const csrfToken = csrfManager.getCSRFToken();
       const response = await axios.post(
@@ -64,7 +56,6 @@ const UserAuthForm = ({ type }) => {
           }
         }
       );
-      console.log("[LOGIN] Response received:", response);
 
       const { data } = response;
 
@@ -84,16 +75,12 @@ const UserAuthForm = ({ type }) => {
         } else {
           toast.success("Google authentication successful!");
         }
-        console.log("[LOGIN] Login success, user data:", data.user);
         setUserAuth(data.user);
         // Only store non-sensitive info in localStorage
         const { _id, username, email, admin, super_admin, avatar, access_token } = data.user;
         localStorage.setItem('userAuth', JSON.stringify({ _id, username, email, admin, super_admin, avatar, access_token }));
-        console.log("[LOGIN] userAuth set in localStorage:", localStorage.getItem('userAuth'));
       }
     } catch (error) {
-      console.error("[LOGIN] Error during login:", error);
-      // Improved error handling for better debugging
       let errorMsg = "Login failed. Please try again.";
       
       if (error?.response?.data?.error) {
@@ -143,10 +130,7 @@ const UserAuthForm = ({ type }) => {
         toast.error(errorMsg);
       }
       
-      // Log the full error object for debugging
-      console.error("[LOGIN] Full error object:", error);
       if (error?.response) {
-        console.error("[LOGIN] Error response data:", error.response.data);
       }
       if (error?.response?.status === 409 && error?.response?.data?.error?.toLowerCase().includes('verified')) {
         toast.error("This email is already registered but not yet verified. A new verification email has been sent. Please check your inbox (and spam folder).");
@@ -166,7 +150,6 @@ const UserAuthForm = ({ type }) => {
 
     let formElement = document.getElementById("formElement");
     if (!formElement) {
-      console.error("Form element is not found");
       return;
     }
     let form = new FormData(formElement);

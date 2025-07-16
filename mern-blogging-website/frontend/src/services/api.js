@@ -206,14 +206,20 @@ export const uploadAPI = {
 // Newsletter API services
 export const newsletterAPI = {
   // Subscribe to newsletter
-  subscribe: async (email) => {
-    const response = await axios.post(`${API_BASE_URL}/newsletter-subscription`, { email });
+  subscribe: async (email, recaptchaToken) => {
+    const response = await axios.post(`${API_BASE_URL}/subscribe-newsletter`, { email, recaptchaToken });
     return response.data;
   },
 
   // Verify newsletter subscription
   verifySubscription: async (token) => {
-    const response = await axios.post(`${API_BASE_URL}/verify-newsletter`, { token });
+    const response = await axios.get(`${API_BASE_URL}/verify-newsletter?token=${token}`);
+    return response.data;
+  },
+
+  // Unsubscribe from newsletter
+  unsubscribe: async (token) => {
+    const response = await axios.post(`${API_BASE_URL}/unsubscribe`, { token });
     return response.data;
   }
 };

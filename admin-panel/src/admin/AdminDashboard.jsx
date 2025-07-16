@@ -72,8 +72,9 @@ export default function AdminDashboard() {
       });
       // Newsletter stats
       setNewsletterStats({
-        subscribers: (newsletterRes.data.stats && newsletterRes.data.stats.totalSubscribers) || 0,
-        sent: (newsletterRes.data.stats && newsletterRes.data.stats.totalSent) || 0
+        subscribers: (newsletterRes.data.stats && newsletterRes.data.stats.total) || 0,
+        // 'sent' is not provided by backend, so set to 0 or remove if not needed
+        sent: 0
       });
       // System health
       setSystemHealth(sysHealthRes.data || null);
@@ -99,10 +100,14 @@ export default function AdminDashboard() {
     { name: 'Published', value: blogStats.published },
     { name: 'Drafts', value: blogStats.drafts },
   ];
-  const commentAreaData = commentStats.recent.map(item => ({
-    date: item.date ? new Date(item.date).toLocaleDateString() : '',
-    comments: item.count || 0
-  }));
+  const commentAreaData = Object.values(
+    commentStats.recent.reduce((acc, item) => {
+      const date = item.commentedAt ? new Date(item.commentedAt).toLocaleDateString() : '';
+      if (!acc[date]) acc[date] = { date, comments: 0 };
+      acc[date].comments += 1;
+      return acc;
+    }, {})
+  );
   const sysHealthAreaData = systemHealthHistory.slice(0, 10).map(log => ({
     date: new Date(log.timestamp).toLocaleDateString(),
     value: log.memoryUsage || log.value || 0

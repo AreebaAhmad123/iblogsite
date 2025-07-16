@@ -1,7 +1,7 @@
 import React from "react";
 import BlogCard from "./BlogCard";
 
-const PostCard = ({ post }) => {
+const PostCard = ({ post, className }) => {
   // Transform post data to match BlogCard format
   const blogData = {
     ...post,
@@ -25,6 +25,7 @@ const PostCard = ({ post }) => {
       showStats={false}
       showBookmark={true}
       showLike={false}
+      className={className}
     />
   );
 };

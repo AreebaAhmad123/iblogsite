@@ -30,11 +30,7 @@ const Editor = () => {
     const { userAuth = {} } = useContext(UserContext);
 
     useEffect(() => {
-        console.log("Editor component mounted with blog_id:", blog_id);
-        console.log("Current userAuth:", userAuth);
-
         if (!blog_id) {
-            console.log("No blog_id provided, initializing empty editor");
             setLoading(false);
             setBlog(blogStructure);
             return;
@@ -45,11 +41,9 @@ const Editor = () => {
 
         const fetchBlog = async () => {
             try {
-                console.log("Fetching blog with ID:", blog_id);
                 const headers = {
                     'Content-Type': 'application/json'
                 };
-                console.log("Request headers:", headers);
 
                 const response = await axios.post(
                     import.meta.env.VITE_SERVER_DOMAIN + "/api/get-blog",
@@ -65,12 +59,9 @@ const Editor = () => {
                     }
                 );
 
-                console.log("Server response:", response.data);
-
                 if (isMounted) {
                     if (response.data.blog) {
                         const fetchedBlog = response.data.blog;
-                        console.log("Raw fetched blog data:", fetchedBlog);
 
                         // Ensure content has the correct structure
                         let formattedContent;
@@ -96,7 +87,6 @@ const Editor = () => {
                         } else {
                             // Ensure each content item has the required fields
                             formattedContent = fetchedBlog.content.map(content => {
-                                console.log("Processing content item:", content);
                                 return {
                                     time: content.time || Date.now(),
                                     blocks: Array.isArray(content.blocks) ? content.blocks : [],
@@ -110,27 +100,16 @@ const Editor = () => {
                             content: formattedContent
                         };
 
-                        console.log("Formatted blog data:", formattedBlog);
-                        console.log("Content structure:", formattedBlog.content);
-                        console.log("First content item:", formattedBlog.content[0]);
-                        console.log("Blocks in first content item:", formattedBlog.content[0]?.blocks);
-
                         setBlog(formattedBlog);
                         setError(null);
                     } else {
-                        console.error("No blog data in response");
                         setError("Blog not found or you don't have permission to edit this blog.");
                         setBlog(null);
                     }
                 }
             } catch (err) {
                 if (isMounted) {
-                    console.error("Error fetching blog:", err);
                     if (err.response) {
-                        console.error("Error response:", err.response.data);
-                        console.error("Error status:", err.response.status);
-                        console.error("Error headers:", err.response.headers);
-                        
                         if (err.response.status === 401) {
                             setError("Authentication expired. Please log in again.");
                         } else if (err.response.status === 403) {
@@ -191,8 +170,6 @@ const Editor = () => {
             </div>
         );
     }
-
-    console.log("Rendering editor with blog data:", blog);
 
     return (
         <EditorErrorBoundary>

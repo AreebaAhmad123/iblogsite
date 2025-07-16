@@ -116,7 +116,6 @@ const HomePage = () => {
                 setBlog(formattedData);
             }
         } catch (err) {
-            console.error("Error fetching latest blogs:", err);
             // Set a default state to prevent infinite loading
             setBlog(prev => prev || { results: [], page: 1, totalDocs: 0 });
         }
@@ -144,7 +143,6 @@ const HomePage = () => {
                 setBlog(formattedData);
             }
         } catch (err) {
-            console.error("Error fetching category blogs:", err);
             // Set a default state to prevent infinite loading
             setBlog(prev => prev || { results: [], page: 1, totalDocs: 0 });
         }
@@ -156,11 +154,9 @@ const HomePage = () => {
             if (data.blogs && Array.isArray(data.blogs)) {
                 setTrendingBlog(data.blogs);
             } else {
-                console.error("Invalid trending blogs response:", data);
                 setTrendingBlog([]);
             }
         } catch (err) {
-            console.error("Error fetching trending blogs:", err);
             setTrendingBlog([]); // Set empty array instead of null
         }
     };
@@ -195,20 +191,15 @@ const HomePage = () => {
     const fetchPopularBlogs = async (page = 1) => {
         setPopularLoading(true);
         try {
-            console.log('Fetching popular blogs, page:', page);
             const { data } = await axios.get(import.meta.env.VITE_SERVER_DOMAIN + `/api/popular-blogs?page=${page}&limit=30`);
-            console.log('Popular blogs response:', data);
             
             if (!data.blogs || !Array.isArray(data.blogs)) {
-                console.error('Invalid response format for popular blogs:', data);
                 setPopularBlogs([]);
                 return;
             }
             
-            console.log('Setting popular blogs:', data.blogs.length, 'blogs');
             setPopularBlogs(data.blogs);
         } catch (err) {
-            console.error("Error fetching popular blogs:", err);
             setPopularBlogs([]);
         } finally {
             setPopularLoading(false);
@@ -219,12 +210,9 @@ const HomePage = () => {
     const fetchNewBlogs = async (page = 1) => {
         setNewLoading(true);
         try {
-            console.log('Fetching new blogs, page:', page);
             const { data } = await axios.post(import.meta.env.VITE_SERVER_DOMAIN + "/api/latest-blogs", { page });
-            console.log('New blogs response:', data);
             
             if (!data.blogs || !Array.isArray(data.blogs)) {
-                console.error('Invalid response format for new blogs:', data);
                 setNewBlogs([]);
                 return;
             }
@@ -235,10 +223,8 @@ const HomePage = () => {
                 date: getDay(blog.publishedAt) // Ensure date is formatted
             }));
             
-            console.log('Setting new blogs:', formattedBlogs.length, 'blogs');
             setNewBlogs(formattedBlogs);
         } catch (err) {
-            console.error("Error fetching new blogs:", err);
             setNewBlogs([]); // Set empty array on error
         } finally {
             setNewLoading(false);
@@ -249,20 +235,15 @@ const HomePage = () => {
     const fetchTrendyBlogs = async (page = 1) => {
         setTrendyLoading(true);
         try {
-            console.log('Fetching trendy blogs, page:', page);
             const { data } = await axios.get(import.meta.env.VITE_SERVER_DOMAIN + `/api/trending-blogs?page=${page}&limit=30`);
-            console.log('Trendy blogs response:', data);
             
             if (!data.blogs || !Array.isArray(data.blogs)) {
-                console.error('Invalid response format for trendy blogs:', data);
                 setTrendyBlogs([]);
                 return;
             }
             
-            console.log('Setting trendy blogs:', data.blogs.length, 'blogs');
             setTrendyBlogs(data.blogs);
         } catch (err) {
-            console.error("Error fetching trendy blogs:", err);
             setTrendyBlogs([]); // Set empty array on error
         } finally {
             setTrendyLoading(false);
@@ -273,20 +254,15 @@ const HomePage = () => {
     const fetchTopBlogs = async (page = 1) => {
         setTopLoading(true);
         try {
-            console.log('Fetching top blogs, page:', page);
             const { data } = await axios.get(import.meta.env.VITE_SERVER_DOMAIN + `/api/top-blogs?page=${page}&limit=30`);
-            console.log('Top blogs response:', data);
             
             if (!data.blogs || !Array.isArray(data.blogs)) {
-                console.error('Invalid response format for top blogs:', data);
                 setTopBlogs([]);
                 return;
             }
             
-            console.log('Setting top blogs:', data.blogs.length, 'blogs');
             setTopBlogs(data.blogs);
         } catch (err) {
-            console.error("Error fetching top blogs:", err);
             setTopBlogs([]);
         } finally {
             setTopLoading(false);
@@ -300,39 +276,30 @@ const HomePage = () => {
     useEffect(() => {
         const loadData = async () => {
             try {
-                console.log('Starting to load data...');
-                console.log('VITE_SERVER_DOMAIN:', import.meta.env.VITE_SERVER_DOMAIN);
                 
                 setBlog(null); // Reset to trigger loader
                 
                 if (pageState == "home") {
-                    console.log('Fetching latest blogs...');
                     await fetchLatestBlogs(1);
                 } else {
-                    console.log('Fetching category blogs...');
                     await fetchBlogsByCategory(1);
                 }
                 
                 if (!trendingblogs) {
-                    console.log('Fetching trending blogs...');
                     fetchTrendingBlogs();
                 }
                 
                 if (mostViewedBlogs.length === 0) {
-                    console.log('Fetching most viewed blogs...');
                     fetchMostViewedBlogs(1);
                 }
                 
                 // Always fetch section blogs on mount
-                console.log('Fetching section blogs...');
                 fetchPopularBlogs(1);
                 fetchNewBlogs(1);
                 fetchTrendyBlogs(1);
                 fetchTopBlogs(1);
                 
-                console.log('Data loading completed');
             } catch (error) {
-                console.error("Error loading initial data:", error);
                 // Set default states to prevent infinite loading
                 setBlog({ results: [], page: 1, totalDocs: 0 });
                 setTrendingBlog([]);
@@ -454,7 +421,7 @@ const HomePage = () => {
             const user = await userAPI.getProfile(userAuth.username);
             setUserAuth(user);
         } catch (err) {
-            console.error("Bookmark error:", err);
+            // console.error("Bookmark error:", err); // Removed sensitive error logging
         } finally {
             // Add a small delay to prevent rapid clicks
             setTimeout(() => {
@@ -517,16 +484,16 @@ const HomePage = () => {
                                     trendingblogs.slice(0, 2).map((blog, i) => (
                                         <motion.div 
                                             key={i} 
-                                            className="h-[300px]"
+                                            className="h-[340px]"
                                             variants={staggerItem}
                                             custom={i}
                                         >
-                                            <TrendingBlogPost blog={blog} />
+                                            <TrendingBlogPost blog={blog} variant="compact" showAuthor={true} showBookmark={true} className="h-full" />
                                         </motion.div>
                                     ))
                                 }
                                 <motion.div 
-                                    className="h-[300px] lg:col-span-2"
+                                    className="h-[340px] lg:col-span-2"
                                     variants={staggerItem}
                                     custom={2}
                                 >
@@ -546,7 +513,7 @@ const HomePage = () => {
                                         {
                                             trendingblogs.slice(2).map((blog, i) => (
                                                 <SwiperSlide key={i}>
-                                                    <TrendingBlogPost blog={blog} />
+                                                    <TrendingBlogPost blog={blog} variant="compact" showAuthor={true} showBookmark={true} className="h-full" />
                                                 </SwiperSlide>
                                             ))
                                         }

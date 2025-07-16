@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Toaster, toast } from 'react-hot-toast';
+import ReCAPTCHA from 'react-google-recaptcha';
 
 const initialForm = { subject: '', name: '', email: '', explanation: '' };
 const initialErrors = { subject: '', name: '', email: '', explanation: '' };
@@ -12,6 +13,7 @@ const ContactUsPage = () => {
   const [message, setMessage] = useState(null);
   const [errors, setErrors] = useState(initialErrors);
   const explanationRef = useRef();
+  const [recaptchaToken, setRecaptchaToken] = useState("");
 
   // Inline validation
   const validate = (field, value) => {
@@ -80,16 +82,24 @@ const ContactUsPage = () => {
     return Object.values(newErrors).every((e) => !e);
   };
 
+  const handleRecaptchaChange = (token) => {
+    setRecaptchaToken(token);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateAll()) return;
+    if (!recaptchaToken) {
+      toast.error("Please complete the CAPTCHA to continue.");
+      return;
+    }
     setLoading(true);
     setMessage(null);
     try {
       const res = await fetch(`${import.meta.env.VITE_SERVER_DOMAIN || ''}/api/contact`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form)
+        body: JSON.stringify({ ...form, recaptchaToken })
       });
       const data = await res.json();
       if (res.ok) {
@@ -164,6 +174,14 @@ const ContactUsPage = () => {
                 {errors.explanation && <div className="text-xs text-red-500 mt-1">{errors.explanation}</div>}
               </div>
             </div>
+          </div>
+
+          {/* reCAPTCHA */}
+          <div className="my-4">
+            <ReCAPTCHA
+              sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
+              onChange={handleRecaptchaChange}
+            />
           </div>
 
           {/* Send Button */}

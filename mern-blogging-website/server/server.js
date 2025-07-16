@@ -16,7 +16,7 @@ import { OAuth2Client } from 'google-auth-library';
 import cookieParser from 'cookie-parser';
 import csurf from 'csurf';
 import axios from 'axios';
-
+import { sendNewsletterToSubscribers, sendNewsletterToSubscriber, sendContactNotification } from './utils/email.js';
 // Security middleware imports
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -2371,30 +2371,61 @@ server.delete("/api/delete-notification/:id", verifyJWT, async (req, res) => {
 });
 
 // Replace /contact endpoint to only handle form fields
-server.post('/api/contact', async (req, res) => {
+// Add specific rate limiter for contact form
+const contactLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // limit each IP to 5 requests per windowMs
+  message: {
+    error: 'Too many contact form submissions, please try again later.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+server.post('/api/contact', contactLimiter, async (req, res) => {
   try {
-    const { subject, name, email, explanation } = req.body;
+    const { subject, name, email, explanation, recaptchaToken } = req.body;
     if (!subject || !name || !email || !explanation) {
       return res.status(400).json({ error: 'All fields are required.' });
     }
-    // Save to database
-    const contact = new Contact({ subject, name, email, explanation });
-    await contact.save();
-
-    // Send email notification to admin
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.ADMIN_EMAIL,
-        pass: process.env.ADMIN_EMAIL_PASSWORD
+    if (!recaptchaToken) {
+      return res.status(400).json({ error: 'CAPTCHA is required.' });
+    }
+    // Verify reCAPTCHA
+    const recaptchaSecret = process.env.RECAPTCHA_SECRET_KEY;
+    const recaptchaResponse = await axios.post(`https://www.google.com/recaptcha/api/siteverify`, null, {
+      params: {
+        secret: recaptchaSecret,
+        response: recaptchaToken
       }
     });
-    await transporter.sendMail({
-      from: `Contact Form <${process.env.ADMIN_EMAIL}>`,
-      to: process.env.ADMIN_EMAIL,
-      subject: `New Contact Message: ${subject}`,
-      text: `Name: ${name}\nEmail: ${email}\n\n${explanation}`
+    if (!recaptchaResponse.data.success) {
+      return res.status(400).json({ error: 'CAPTCHA verification failed. Please try again.' });
+    }
+    // Email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Invalid email format.' });
+    }
+    // Sanitize input fields
+    const sanitizedSubject = sanitizeInput(subject);
+    const sanitizedName = sanitizeInput(name);
+    const sanitizedEmail = sanitizeInput(email);
+    const sanitizedExplanation = sanitizeInput(explanation);
+    // Save to database
+    const contact = new Contact({ subject: sanitizedSubject, name: sanitizedName, email: sanitizedEmail, explanation: sanitizedExplanation });
+    await contact.save();
+
+    // Send email notification to admin using utility
+    const emailResult = await sendContactNotification({
+      subject: sanitizedSubject,
+      name: sanitizedName,
+      email: sanitizedEmail,
+      message: sanitizedExplanation
     });
+    if (!emailResult.success) {
+      return res.status(500).json({ error: 'Failed to send notification email.' });
+    }
 
     res.json({ message: 'Message received! Thank you for contacting us.' });
   } catch (err) {
@@ -2418,57 +2449,82 @@ server.get("/api/recent-comments", async (req, res) => {
     }
 });
 
+// Add specific rate limiter for newsletter subscription
+const newsletterLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // limit each IP to 5 requests per windowMs
+  message: {
+    error: 'Too many newsletter subscription attempts, please try again later.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Newsletter subscription endpoint
-server.post('/api/subscribe-newsletter', async (req, res) => {
+server.post('/api/subscribe-newsletter', newsletterLimiter, async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, recaptchaToken } = req.body;
     if (!email) {
       return res.status(400).json({ error: 'Email is required.' });
     }
-    // Validate email format
-    const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ error: 'Invalid email address.' });
+    if (!recaptchaToken) {
+      return res.status(400).json({ error: 'CAPTCHA is required.' });
     }
-    // Check if already subscribed
-    let existing = await Newsletter.findOne({ email });
-    if (existing) {
-      return res.status(400).json({ error: 'Email already subscribed.' });
-    }
-    // Generate verification token
-    const verificationToken = nanoid(32);
-    await new Newsletter({ email, isActive: false, verificationToken }).save();
-
-    // Send verification email
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.ADMIN_EMAIL,
-        pass: process.env.ADMIN_EMAIL_PASSWORD
+    // Verify reCAPTCHA
+    const recaptchaSecret = process.env.RECAPTCHA_SECRET_KEY;
+    const recaptchaResponse = await axios.post(`https://www.google.com/recaptcha/api/siteverify`, null, {
+      params: {
+        secret: recaptchaSecret,
+        response: recaptchaToken
       }
     });
-    const verifyUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-newsletter?token=${verificationToken}`;
-    await transporter.sendMail({
-      from: `Islamic Stories <${process.env.ADMIN_EMAIL}>`,
-      to: email,
-      subject: 'Confirm your newsletter subscription',
-      text: `Thank you for subscribing! Please confirm your subscription by clicking this link: ${verifyUrl}`
-    });
-
-    // Notify all admins
-    const admins = await User.find({ $or: [ { admin: true }, { super_admin: true } ] });
-    for (const admin of admins) {
-      await new Notification({
-        type: 'newsletter',
-        notification_for: admin._id,
-        for_role: 'admin',
-        // user is not required for newsletter notifications
-      }).save();
+    if (!recaptchaResponse.data.success) {
+      return res.status(400).json({ error: 'CAPTCHA verification failed. Please try again.' });
     }
-
-    res.json({ message: 'Subscription started! Please check your email to confirm your subscription.' });
+    let subscriber;
+    try {
+      subscriber = await Newsletter.findOne({ email: email.toLowerCase() });
+    } catch (dbErr) {
+      return res.status(500).json({ error: 'Database error.' });
+    }
+    if (subscriber && subscriber.isActive) {
+      return res.status(409).json({ error: 'Email already subscribed.' });
+    }
+    let verificationToken;
+    if (!subscriber) {
+      verificationToken = nanoid(32);
+      const unsubscribeToken = nanoid(32);
+      try {
+        subscriber = new Newsletter({
+          email: email.toLowerCase(),
+          isActive: false,
+          verificationToken,
+          unsubscribeToken
+        });
+        await subscriber.save();
+      } catch (saveErr) {
+        return res.status(500).json({ error: 'Failed to save subscriber.' });
+      }
+    } else {
+      verificationToken = nanoid(32);
+      subscriber.verificationToken = verificationToken;
+      subscriber.isActive = false;
+      if (!subscriber.unsubscribeToken) subscriber.unsubscribeToken = nanoid(32);
+      try {
+        await subscriber.save();
+      } catch (updateErr) {
+        return res.status(500).json({ error: 'Failed to update subscriber.' });
+      }
+    }
+    let emailResult;
+    try {
+      const { sendNewsletterVerificationEmail } = await import('./utils/email.js');
+      emailResult = await sendNewsletterVerificationEmail(email, verificationToken);
+    } catch (emailErr) {
+      return res.status(500).json({ error: 'Failed to send verification email.' });
+    }
+    return res.status(200).json({ message: 'Subscription request received. Please check your email to verify.' });
   } catch (err) {
-    console.error('Newsletter subscription error:', err);
     res.status(500).json({ error: 'Failed to subscribe.' });
   }
 });
@@ -3209,7 +3265,12 @@ server.post("/api/admin/database-maintenance", verifyJWT, requireAdmin, async (r
             message: `Optimized ${optimizedIndexes} indexes, cleaned ${cleanedComments} orphaned comments, cleaned ${cleanedBlogs} blogs with missing authors.`,
             status: 'success',
             timestamp: new Date(),
-            // Optionally, add more fields as needed
+            optimizedIndexes,
+            cleanedRecords: {
+                orphanedComments: cleanedComments,
+                blogsWithMissingAuthors: cleanedBlogs
+            },
+            sizeReduction
         });
         await log.save();
 
@@ -3659,30 +3720,36 @@ server.get("/api/admin/newsletter-subscribers", verifyJWT, requireAdmin, async (
 server.post("/api/admin/send-newsletter", verifyJWT, requireAdmin, async (req, res) => {
     try {
         const { subject, content } = req.body;
-        
         if (!subject || !content) {
             return res.status(400).json({ error: "Subject and content are required." });
         }
-
-        console.log('📧 [Admin] Sending newsletter to all subscribers...');
-        console.log('📧 [Admin] Subject:', subject);
-        console.log('📧 [Admin] Content length:', content.length);
-
         const result = await sendNewsletterToSubscribers(subject, content);
-        
+        await MaintenanceLog.create({
+            type: 'newsletter',
+            action: 'send',
+            performedBy: req.user,
+            message: `Newsletter sent to all active subscribers`,
+            status: result.success ? 'success' : 'failure',
+            details: `Subject: ${subject}, Success: ${result.successCount}, Failed: ${result.failureCount}`
+        });
         if (result.success) {
-            console.log('📧 [Admin] Newsletter sent successfully:', result);
             res.json({
                 success: true,
                 message: `Newsletter sent to ${result.successCount} subscribers`,
                 stats: result
             });
         } else {
-            console.error('📧 [Admin] Newsletter sending failed:', result.error);
             res.status(500).json({ error: result.error });
         }
     } catch (err) {
-        console.error("Error sending newsletter:", err);
+        await MaintenanceLog.create({
+            type: 'newsletter',
+            action: 'send',
+            performedBy: req.user,
+            message: 'Newsletter send failed',
+            status: 'failure',
+            details: err.message
+        });
         res.status(500).json({ error: "Failed to send newsletter." });
     }
 });
@@ -3718,14 +3785,28 @@ server.delete("/api/admin/newsletter-subscriber/:id", verifyJWT, requireAdmin, a
     try {
         const { id } = req.params;
         const subscriber = await Newsletter.findByIdAndDelete(id);
-        
         if (!subscriber) {
             return res.status(404).json({ error: "Subscriber not found." });
         }
-        
+        await MaintenanceLog.create({
+            type: 'newsletter',
+            action: 'delete',
+            performedBy: req.user,
+            target: subscriber.email,
+            message: 'Newsletter subscriber deleted',
+            status: 'success',
+            details: `Subscriber ID: ${id}`
+        });
         res.json({ success: true, message: "Subscriber deleted successfully." });
     } catch (err) {
-        console.error("Error deleting newsletter subscriber:", err);
+        await MaintenanceLog.create({
+            type: 'newsletter',
+            action: 'delete',
+            performedBy: req.user,
+            message: 'Newsletter subscriber delete failed',
+            status: 'failure',
+            details: err.message
+        });
         res.status(500).json({ error: "Failed to delete subscriber." });
     }
 });
@@ -3735,28 +3816,40 @@ server.patch("/api/admin/newsletter-subscriber/:id", verifyJWT, requireAdmin, as
     try {
         const { id } = req.params;
         const { isActive } = req.body;
-        
         if (typeof isActive !== 'boolean') {
             return res.status(400).json({ error: "isActive must be a boolean." });
         }
-        
         const subscriber = await Newsletter.findByIdAndUpdate(
             id, 
             { isActive }, 
             { new: true }
         );
-        
         if (!subscriber) {
             return res.status(404).json({ error: "Subscriber not found." });
         }
-        
+        await MaintenanceLog.create({
+            type: 'newsletter',
+            action: isActive ? 'activate' : 'deactivate',
+            performedBy: req.user,
+            target: subscriber.email,
+            message: `Subscriber ${isActive ? 'activated' : 'deactivated'}`,
+            status: 'success',
+            details: `Subscriber ID: ${id}`
+        });
         res.json({ 
             success: true, 
             message: `Subscriber ${isActive ? 'activated' : 'deactivated'} successfully.`,
             subscriber 
         });
     } catch (err) {
-        console.error("Error updating newsletter subscriber:", err);
+        await MaintenanceLog.create({
+            type: 'newsletter',
+            action: 'status-change',
+            performedBy: req.user,
+            message: 'Newsletter subscriber status change failed',
+            status: 'failure',
+            details: err.message
+        });
         res.status(500).json({ error: "Failed to update subscriber." });
     }
 });
@@ -3829,3 +3922,158 @@ server.delete("/api/admin/user/:id", verifyJWT, requireAdmin, async (req, res) =
     return res.status(500).json({ error: "Failed to delete user." });
     }
 });
+
+// Unsubscribe from newsletter
+server.post('/api/unsubscribe', async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      return res.status(400).json({ error: 'Unsubscribe token is required.' });
+    }
+    // Find the subscriber by unsubscribeToken
+    const subscriber = await Newsletter.findOne({ unsubscribeToken: token, isActive: true });
+    if (!subscriber) {
+      return res.status(404).json({ error: 'Invalid or expired unsubscribe link.' });
+    }
+    subscriber.isActive = false;
+    // Optionally, clear the token so it can't be reused
+    subscriber.unsubscribeToken = undefined;
+    await subscriber.save();
+    return res.json({ message: 'You have been unsubscribed from the newsletter.' });
+  } catch (err) {
+    console.error('Unsubscribe error:', err);
+    res.status(500).json({ error: 'Failed to unsubscribe.' });
+  }
+});
+
+// Add specific rate limiter for resending newsletter verification
+const resendNewsletterVerificationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 3, // limit each IP to 3 requests per windowMs
+  message: {
+    error: 'Too many verification email requests, please try again later.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Resend newsletter verification email
+server.post('/api/resend-newsletter-verification', resendNewsletterVerificationLimiter, async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || !emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Valid email is required.' });
+    }
+    let subscriber = await Newsletter.findOne({ email });
+    if (!subscriber) {
+      return res.status(404).json({ error: 'Subscriber not found.' });
+    }
+    if (subscriber.isActive) {
+      return res.status(400).json({ error: 'Subscription already verified.' });
+    }
+    // Generate new token
+    const verificationToken = nanoid(32);
+    subscriber.verificationToken = verificationToken;
+    await subscriber.save();
+    // Send verification email
+    // Use utility if available, else inline
+    try {
+      // Try to use utility
+      let sendNewsletterVerificationEmail;
+      try {
+        sendNewsletterVerificationEmail = (await import('./utils/email.js')).sendNewsletterVerificationEmail;
+      } catch {}
+      if (sendNewsletterVerificationEmail) {
+        await sendNewsletterVerificationEmail(email, verificationToken);
+      } else {
+        const transporter = nodemailer.createTransport({
+          service: 'gmail',
+          auth: {
+            user: process.env.ADMIN_EMAIL,
+            pass: process.env.ADMIN_EMAIL_PASSWORD
+          }
+        });
+        const verifyUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-newsletter?token=${verificationToken}`;
+        await transporter.sendMail({
+          from: `Islamic Stories <${process.env.ADMIN_EMAIL}>`,
+          to: email,
+          subject: 'Confirm your newsletter subscription',
+          text: `Thank you for subscribing! Please confirm your subscription by clicking this link: ${verifyUrl}`
+        });
+      }
+      return res.status(200).json({ message: 'Verification email resent. Please check your inbox.' });
+    } catch (emailErr) {
+      console.error('Error sending verification email:', emailErr);
+      return res.status(500).json({ error: 'Failed to send verification email. Please try again.' });
+    }
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// === ADMIN NEWSLETTER MANAGEMENT ===
+
+// ... existing code ...
+
+// Bulk update (activate/deactivate) newsletter subscribers
+server.post("/api/admin/newsletter-subscribers/bulk-update", verifyJWT, requireAdmin, async (req, res) => {
+    const { ids, isActive } = req.body;
+    if (!Array.isArray(ids) || typeof isActive !== 'boolean') {
+        return res.status(400).json({ error: "ids (array) and isActive (boolean) are required." });
+    }
+    let result = { success: [], failed: [] };
+    for (const id of ids) {
+        try {
+            const subscriber = await Newsletter.findByIdAndUpdate(id, { isActive }, { new: true });
+            if (subscriber) {
+                result.success.push(id);
+                await MaintenanceLog.create({
+                    type: 'newsletter',
+                    action: isActive ? 'activate' : 'deactivate',
+                    performedBy: req.user,
+                    target: subscriber.email,
+                    message: `Subscriber ${isActive ? 'activated' : 'deactivated'} (bulk)`,
+                    status: 'success',
+                    details: `Subscriber ID: ${id}`
+                });
+            } else {
+                result.failed.push({ id, reason: 'Not found' });
+            }
+        } catch (err) {
+            result.failed.push({ id, reason: err.message });
+        }
+    }
+    res.json(result);
+});
+
+// Bulk delete newsletter subscribers
+server.post("/api/admin/newsletter-subscribers/bulk-delete", verifyJWT, requireAdmin, async (req, res) => {
+    const { ids } = req.body;
+    if (!Array.isArray(ids)) {
+        return res.status(400).json({ error: "ids (array) is required." });
+    }
+    let result = { success: [], failed: [] };
+    for (const id of ids) {
+        try {
+            const subscriber = await Newsletter.findByIdAndDelete(id);
+            if (subscriber) {
+                result.success.push(id);
+                await MaintenanceLog.create({
+                    type: 'newsletter',
+                    action: 'delete',
+                    performedBy: req.user,
+                    target: subscriber.email,
+                    message: 'Newsletter subscriber deleted (bulk)',
+                    status: 'success',
+                    details: `Subscriber ID: ${id}`
+                });
+            } else {
+                result.failed.push({ id, reason: 'Not found' });
+            }
+        } catch (err) {
+            result.failed.push({ id, reason: err.message });
+        }
+    }
+    res.json(result);
+});
+// ... existing code ...

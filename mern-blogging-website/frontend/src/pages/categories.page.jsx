@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useContext } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { FooterContext } from "../App";
 import Loader from "../components/loader.component";
 import PostCard from "../components/PostCard";
 import LoadMoreDataBtn from "../components/load-more.component";
 import { filterPaginationData } from "../common/filter-pagination-data";
 import axios from "axios";
+import CategoryCard from "../components/category-card.component";
 
 const CategoriesPage = () => {
   const { categories, setCategories } = useContext(FooterContext);
   const { categoryName } = useParams(); // expects route: /categories/:categoryName
   const [blogs, setBlogs] = useState(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   const fetchBlogs = async (page = 1) => {
     try {
@@ -77,6 +79,20 @@ const CategoriesPage = () => {
 
   return (
     <div className="max-w-screen-2xl w-full mx-auto px-4 py-8 categories-page-content">
+      {/* Categories Grid */}
+      {categories && categories.length > 0 && (
+        <div className="mb-10">
+          <h2 className="text-xl font-semibold mb-4">Browse Categories</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {categories.map((cat) => (
+              <div key={cat} onClick={() => navigate(`/categories/${encodeURIComponent(cat)}`)} className="cursor-pointer">
+                <CategoryCard categoryName={cat} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {/* Blogs Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
         {blogs && blogs.results && blogs.results.length > 0 ? (
           blogs.results.map((blog) => (
@@ -93,6 +109,7 @@ const CategoriesPage = () => {
                 date: blog.publishedAt || blog.date,
                 blog_id: blog.blog_id || blog._id,
               }}
+              className="h-full"
             />
           ))
         ) : (

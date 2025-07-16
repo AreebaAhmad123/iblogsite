@@ -14,6 +14,35 @@ const ChangePassword = () => {
     const { userAuth } = useContext(UserContext)
     const navigate = useNavigate()
 
+    if (userAuth && userAuth.google_auth) {
+        return (
+            <div className="change-password-page min-h-screen bg-gray-50 py-8">
+                <div className="max-w-md mx-auto px-4">
+                    <div className="mb-8">
+                        <h1 className="text-3xl font-bold text-gray-800 mb-2">Change Password</h1>
+                        <p className="text-gray-600">Update your account password</p>
+                    </div>
+                    <div className="bg-white rounded-lg shadow-sm p-6 text-center">
+                        <h2 className="text-xl font-semibold text-yellow-500 mb-4">Google Account Detected</h2>
+                        <p className="text-gray-700 mb-4">
+                            You signed up or log in using Google authentication.<br/>
+                            Password changes are not available for Google-authenticated accounts.<br/>
+                            To manage your password, please visit your Google Account settings.
+                        </p>
+                        <a
+                            href="https://myaccount.google.com/security"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-block mt-4 px-6 py-2 bg-yellow-400 text-white rounded-lg hover:bg-yellow-500 transition-colors"
+                        >
+                            Go to Google Account Security
+                        </a>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     const handleInputChange = (e) => {
         const { name, value } = e.target
         setFormData(prev => ({

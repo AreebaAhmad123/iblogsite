@@ -35,7 +35,6 @@ const NotificationCard = ({ data, index, notificationState }) => {
     let author_username = userAuth?.personal_info?.username || userAuth?.username;
     let author_profile_img = userAuth?.personal_info?.profile_img || userAuth?.profile_img;
     let access_token = userAuth?.access_token;
-    const isAdmin = userAuth?.admin === true;
 
     let { notifications, notifications: {results, totalDocs} , setNotifications} = notificationState;
 
@@ -178,7 +177,7 @@ const NotificationCard = ({ data, index, notificationState }) => {
             )}
             
             <div className="ml-14 pl-5 mt-3 flex gap-8">
-                {(notification_id && (userAuth?._id === user?._id || isAdmin)) && (
+                {(notification_id && (userAuth?._id === user?._id)) && (
                     <button className="text-red underline hover:text-red-700 font-medium px-2 py-1" onClick={(e)=> handleDeleteNotification(notification_id, e.target)}>Delete Notification</button>
                 )}
             </div>
