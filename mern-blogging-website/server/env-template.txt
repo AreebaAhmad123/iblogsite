@@ -67,14 +67,3 @@ MONGODB_SOCKET_TIMEOUT=45000
 # SENTRY_DSN=your_sentry_dsn_here
 # GOOGLE_ANALYTICS_ID=your_ga_id_here
 
-# ===== SECURITY NOTES =====
-# 1. Never commit this file to version control
-# 2. Use strong, unique passwords for all services
-# 3. Enable 2FA on all admin accounts
-# 4. Regularly rotate secrets and API keys
-# 5. Use environment-specific configurations
-# 6. Monitor logs for suspicious activity
-# 7. Keep all dependencies updated
-# 8. Use HTTPS in production
-# 9. Implement proper backup strategies
-# 10. Regular security audits 
